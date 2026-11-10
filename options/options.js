@@ -1,4 +1,5 @@
 'use strict';
+const api = CCR.api;
 let settings = null;
 
 const $ = s => document.querySelector(s);
@@ -56,7 +57,7 @@ function bindInputs() {
 }
 
 async function renderDecisions() {
-  const { siteDecisions = {} } = await chrome.storage.local.get('siteDecisions');
+  const { siteDecisions = {} } = await api.storage.local.get('siteDecisions');
   const box = $('#decisions');
   const entries = Object.entries(siteDecisions).sort();
   if (!entries.length) { box.innerHTML = '<div class="empty">Brak zapamiętanych decyzji.</div>'; return; }
@@ -69,7 +70,7 @@ async function renderDecisions() {
       <button class="x" title="Zapomnij">✕</button>`;
     it.querySelector('button').onclick = async () => {
       delete siteDecisions[host];
-      await chrome.storage.local.set({ siteDecisions });
+      await api.storage.local.set({ siteDecisions });
       renderDecisions();
     };
     box.appendChild(it);
@@ -77,7 +78,7 @@ async function renderDecisions() {
 }
 
 async function renderLog() {
-  const { log = [] } = await chrome.storage.local.get('log');
+  const { log = [] } = await api.storage.local.get('log');
   const box = $('#log');
   if (!log.length) { box.innerHTML = '<div class="empty">Jeszcze nic nie obsłużono.</div>'; return; }
   box.innerHTML = log.slice(0, 40).map(e => {
@@ -88,7 +89,7 @@ async function renderLog() {
   }).join('');
 }
 
-$('#clearLog').onclick = async () => { await chrome.storage.local.set({ log: [] }); renderLog(); };
+$('#clearLog').onclick = async () => { await api.storage.local.set({ log: [] }); renderLog(); };
 $('#reset').onclick = async () => {
   if (!confirm('Przywrócić ustawienia domyślne? (Zapamiętane decyzje i log zostaną.)')) return;
   settings = CCR.mergeSettings(null);
@@ -96,7 +97,7 @@ $('#reset').onclick = async () => {
   bindInputs();
 };
 
-chrome.storage.onChanged.addListener((changes, area) => {
+api.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.log) renderLog();
   if (area === 'local' && changes.siteDecisions) renderDecisions();
 });

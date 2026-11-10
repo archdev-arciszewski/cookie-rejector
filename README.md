@@ -1,13 +1,32 @@
-# Cookie Rejector (Chrome, Manifest V3)
+# Cookie Rejector
 
 Wtyczka, która sama obsługuje banery zgód na cookies: zostawia **niezbędne** i **funkcjonalne**, a odrzuca resztę (analityczne, reklamowe, personalizację, media społecznościowe, partnerów / third-party, **uzasadniony interes** i wszystko niesklasyfikowane). Nie musisz nic klikać.
 
+## Wspierane przeglądarki
+
+Ten sam kod działa wszędzie tak samo — różni się tylko manifest paczki dla Firefoksa (blok `background` i identyfikator dodatku).
+
+| Przeglądarka | Paczka | Status |
+|---|---|---|
+| Google Chrome | `chromium` | ✅ testowana |
+| Microsoft Edge (157) | `chromium` | ✅ testy end-to-end |
+| CCleaner Browser (154) | `chromium` | ✅ testy end-to-end + potwierdzona ręcznie |
+| Mozilla Firefox (128+, testowany 159) | `firefox` | ✅ testy end-to-end |
+| Opera | `chromium` | ⚠️ ta sama paczka co Chrome, nie testowana |
+
 ## Instalacja
 
-1. Otwórz `chrome://extensions`.
-2. Włącz **Tryb dewelopera** (prawy górny róg).
-3. Kliknij **Załaduj rozpakowane** i wskaż folder `cookie-rejector`.
+Pobierz paczkę z zakładki **Releases** albo zbuduj ją sam: `python build.py` (wynik w `dist/`).
+
+**Chrome, Edge, Opera, CCleaner Browser**
+1. Otwórz stronę rozszerzeń: `chrome://extensions`, `edge://extensions`, `opera://extensions` (CCleaner może przekierować na własny adres).
+2. Włącz **Tryb dewelopera**.
+3. Kliknij **Załaduj rozpakowane** i wskaż folder repozytorium (albo rozpakowany `cookie-rejector-*-chromium.zip`).
 4. Po instalacji otworzy się strona ustawień.
+
+**Firefox**
+- Na próbę: `about:debugging#/runtime/this-firefox` → **Załaduj tymczasowy dodatek** → wskaż `dist/firefox/manifest.json`. Dodatek znika po restarcie przeglądarki.
+- Na stałe: zwykły Firefox instaluje tylko dodatki podpisane przez Mozillę. Paczkę `cookie-rejector-*-firefox.zip` trzeba podpisać na [addons.mozilla.org](https://addons.mozilla.org/developers/) (bezpłatnie, także jako „nielistowana”) albo użyć Firefox Developer Edition / Nightly z `xpinstall.signatures.required = false`.
 
 ## Jak działa
 
@@ -46,10 +65,24 @@ src/rules.js       słowniki heurystyk + reguły znanych CMP
 src/content.js     silnik (wykrywanie, przełączniki, odrzucanie, ściany)
 src/ui.js          okienko z pytaniem i dymek (zamknięty Shadow DOM)
 src/page-api.js    wywołania JS-API CMP w kontekście strony
-src/background.js  service worker: konfiguracja, licznik, log, decyzje, zamykanie kart
+src/background.js  tło (service worker / Firefox: skrypt tła): konfiguracja, licznik, log, decyzje, zamykanie kart
 options/, popup/   interfejs
-test/index.html    strona testowa silnika (python -m http.server, potem /test/index.html?case=onetrust|tcf|reject|pay|wall|info)
+build.py           buduje dist/*-chromium.zip i dist/*-firefox.zip
+test/index.html    strona testowa: ?case=onetrust|tcf|reject|pay|wall|info|wp (silnik wstrzyknięty ze stubami)
+test/e2e.mjs       testy end-to-end w prawdziwej przeglądarce z zainstalowanym rozszerzeniem (?ext=1)
+test/serve.py      lokalny serwer testowy
 ```
+
+## Testy
+
+```bash
+python build.py
+python test/serve.py 8765        # uruchom w katalogu nadrzędnym repo
+node test/e2e.mjs firefox "C:\Program Files\Mozilla Firefox\firefox.exe"
+node test/e2e.mjs chromium "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+```
+
+Skrypt uruchamia przeglądarkę w trybie headless na tymczasowym profilu, instaluje rozszerzenie i sprawdza wszystkie scenariusze (w tym odwzorowanie ściany „zgoda albo płać” z wp.pl).
 
 ## Ograniczenia
 

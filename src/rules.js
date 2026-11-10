@@ -21,7 +21,7 @@
   ];
 
   const BTN_SAVE = [
-    /\bzapisz/, /\bzatwierdz/, /\bpotwierdz/, /(akceptuj|zaakceptuj|zezwol na|zapisz) (wybran|zaznaczon|moj wybor|wybor)/,
+    /\bzapisz/, /\bzapisuj/, /\bzapisac/, /\bzatwierdz/, /\bpotwierdz/, /(akceptuj|zaakceptuj|zezwol na|zapisz) (wybran|zaznaczon|moj wybor|wybor)/,
     /\bsave\b/, /\bconfirm/, /(accept|allow) (selected|selection|my selection|current|chosen)/, /\bapply\b/, /\bsubmit\b/,
     /speicher/, /auswahl (bestatigen|erlauben|akzeptieren|zulassen|speichern)/, /\bbestatig/,
     /enregistr/, /\bvalider/, /\bconfirmer/,
@@ -34,7 +34,7 @@
   const WORD_ALL = [/wszystk/, /\ball\b/, /\balle\b/, /\btous\b/, /\btout\b/, /\btodas?\b/, /\btutt[ie]\b/, /\bvse\b/];
 
   const BTN_PAY = [
-    /subskryb/, /subskrypc/, /abonament/, /\bwykup/, /zaplac/, /\boplat/, /bez reklam/, /\bpremium\b/,
+    /subskryb/, /subskrypc/, /abonament/, /\bwykup/, /zaplac/, /\bplac(e|ic|isz)\b/, /\boplat/, /\bkup (dostep|abonament|subskrypc)/, /bez reklam/, /\bpremium\b/,
     /subscri/, /\bpay\b/, /\bpayment/, /ad.?free/, /without ads/, /reject and (pay|subscribe)/,
     /\babo\b/, /abonnier/, /\bpur\b/, /werbefrei/, /ohne werbung/, /contentpass/, /\bzahlen/, /bezahl/,
     /s'abonner/, /\babonn/, /\bpayer\b/, /sans publicit/,
@@ -44,9 +44,15 @@
     /predplat/
   ];
 
+  // "Nie chcę płacić, akceptuję" — przycisk z odmową płacenia to akceptacja, nie płatność
+  const PAY_NEGATED = [
+    /nie (chce |bede )?(placic|zaplacic|place)/, /bez (placenia|oplat)/, /(don'?t|do not) (want to )?pay/, /without pay/,
+    /nicht (zahlen|bezahlen)/, /ohne (zu )?(zahlen|bezahlen)/, /sans payer/, /sin pagar/, /senza pagare/, /zonder (te )?betalen/
+  ];
+
   const BTN_ACCEPT = [
     /\bakceptuj/, /\bzaakceptuj/, /\bakceptuje/, /\bzgadzam/, /przejdz do (serwisu|strony)/, /przechodze do (serwisu|strony)/,
-    /\brozumiem/, /\bprzyjmuj/, /wyrazam zgode/, /\bdaj zgode/, /\bzezwol/, /\bjasne\b/,
+    /\brozumiem/, /\bprzyjmuj/, /\bwlacz(am)? wszystk/, /wyrazam zgode/, /\bdaj zgode/, /\bzezwol/, /\bjasne\b/,
     /^ok\b/, /^okay\b/, /\baccept/, /\bagree/, /\ballow/, /^consent\b/, /^i consent/,/got it/, /\bi understand/, /^continue\b/, /^yes\b/,
     /akzeptier/, /zustimm/, /einverstanden/, /erlauben/, /zulassen/, /^weiter\b/,
     /\baccepter/, /j'accepte/, /d'accord/, /autoriser/, /^continuer\b/,
@@ -85,6 +91,7 @@
     /consenso/, /toestemming/, /souhlas/, /soukromi/, /legitimate interest/, /uzasadnion/
   ];
   const TXT_PAY = [
+    /abonament/, /\bplac(e|ic|isz)\b/, /zl ?\/ ?(mies|msc|miesiac)/, /\bzl miesiecznie/, /€ ?\/ ?(monat|month|mois)/, /\bpro monat\b/, /per month/, /\/ ?month/,
     /subskrypc/, /subskryb/, /wykup (dostep|abonament|subskrypc)/, /\bzaplac/, /bez reklam/, /platn(y|a|e) (dostep|wersj|abonament)/,
     /subscri(be|ption)/, /\bpay\b/, /ad.?free/, /without ads/, /pay or (ok|accept)/, /reject and pay/,
     /\bpur\b/, /\bpur.?abo/, /werbefrei/, /ohne werbung/, /contentpass/, /abo abschliess/, /bezahl/,
@@ -149,7 +156,7 @@
   ];
 
   g.CCR_RULES = {
-    BTN_REJECT, BTN_SAVE, WORD_ALL, BTN_PAY, BTN_ACCEPT, BTN_SETTINGS, BTN_CLOSE, BTN_OBJECT_ALL,
+    BTN_REJECT, BTN_SAVE, WORD_ALL, BTN_PAY, PAY_NEGATED, BTN_ACCEPT, BTN_SETTINGS, BTN_CLOSE, BTN_OBJECT_ALL,
     TXT_STRONG, TXT_WEAK, TXT_PAY, CAT, CAT_ORDER, TOGGLE_SKIP, CMPS
   };
 })(globalThis);

@@ -5,6 +5,7 @@
   if (window.__ccrLoaded) return;
   window.__ccrLoaded = true;
 
+  const api = globalThis.CCR.api;
   const R = globalThis.CCR_RULES;
   const UI = globalThis.CCR_UI;
   const IS_TOP = window === window.top;
@@ -151,11 +152,12 @@
 
   function classifyButton(t) {
     if (!t || t.length > 90) return null;
+    // płatność ma pierwszeństwo: "Nadal odrzucam, chcę zapłacić" to NIE jest zwykłe "Odrzuć"
+    if (any(t, R.BTN_PAY) && !any(t, R.PAY_NEGATED)) return 'pay';
     if (any(t, R.BTN_REJECT)) return 'reject';
     const acc = any(t, R.BTN_ACCEPT);
     const all = any(t, R.WORD_ALL);
     if (any(t, R.BTN_SAVE) && !(acc && all)) return 'save';
-    if (any(t, R.BTN_PAY)) return 'pay';
     if (any(t, R.BTN_SETTINGS) && !(acc && all)) return 'settings';
     if (acc) return 'accept';
     if (R.BTN_CLOSE.test(t)) return 'close';
@@ -435,7 +437,7 @@
       if (/^(SCRIPT|STYLE|LINK|META|NOSCRIPT|TEMPLATE|IFRAME|HEAD)$/.test(el.tagName)) continue;
       if (!isVisible(el)) continue;
       const text = norm(deepText(el));
-      if (text.length < 20 || text.length > 6000) continue;
+      if (text.length < 20 || text.length > 12000) continue;
       const score = cookieScore(text);
       if (score < 3) continue;
       const floating = isFloating(el);
@@ -493,7 +495,7 @@
   }
 
   function send(msg) {
-    return chrome.runtime.sendMessage(msg).catch(() => null);
+    return api.runtime.sendMessage(msg).catch(() => null);
   }
 
   function report(method, cmp, extra = {}) {
@@ -555,9 +557,10 @@
     const pb = analyze(panel, cmp);
     const save = pb.save[0] || (cmp && cmp.save && deepQueryAll(document, cmp.save).find(isVisible));
     if (!save) return { ok: false, opened: true, panel };
-    report('granular', cmp, { cats: summarizeCats(res.cats), changed: res.changed });
+    const info = { cats: summarizeCats(res.cats), changed: res.changed };
+    if (!IS_TOP) report('granular', cmp, info); // ramka CMP może zniknąć razem z banerem
     await click(save);
-    if (await waitGone([root, panel], 3000)) return { ok: true };
+    if (await waitGone([root, panel], 3000)) { if (IS_TOP) report('granular', cmp, info); return { ok: true }; }
     return { ok: false, opened: true, panel };
   }
 
@@ -566,9 +569,9 @@
       if (!isShown(scope)) continue;
       const b = analyze(scope, cmp);
       if (b.reject.length) {
-        report('reject', cmp);
+        if (!IS_TOP) report('reject', cmp);
         await click(b.reject[0]);
-        if (await waitGone([root, panel], 3000)) return true;
+        if (await waitGone([root, panel], 3000)) { if (IS_TOP) report('reject', cmp); return true; }
       }
     }
     return false;
@@ -675,7 +678,7 @@
   // ======================================================================
   // Wiadomości z backgroundu
   // ======================================================================
-  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  api.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (!msg || !msg.type) return;
     if (msg.type === 'wall-prompt' && IS_TOP) {
       UI.askWall(msg).then(sendResponse);

@@ -29,12 +29,13 @@
     categories: { necessary: true, functional: true, analytics: false, marketing: false, personalization: false, social: false, thirdParty: false, legitimateInterest: false, other: false }
   }));
   if (params.get('onlyNecessary')) settings.categories.functional = false;
-  window.chrome = {
+  if (!params.get('ext')) window.chrome = {
     runtime: {
       sendMessage: async (msg) => {
         if (msg.type === 'init') return { settings, topHost: location.hostname, disabled: false };
         if (msg.type === 'handled') { window.__reports.push(msg); return { ok: true }; }
-        if (msg.type === 'wall') { window.__walls.push(msg); const r = await CCR_UI.askWall({ kind: msg.kind, host: location.hostname, onDecline: 'nothing', remember: true }); return { decision: r.decision }; }
+        if (msg.type === 'wall' && params.get('wall')) { window.__walls.push(msg); return { decision: params.get('wall') }; }
+        if (msg.type === 'wall') { window.__walls.push(msg); const r =await CCR_UI.askWall({ kind: msg.kind, host: location.hostname, onDecline: 'nothing', remember: true }); return { decision: r.decision }; }
       },
       onMessage: { addListener() {} }
     }
@@ -81,6 +82,9 @@
       <div class="overlay"><div class="box"><h2>Reklamy finansują nasz serwis</h2>
         <p>Zaakceptuj cookies i zgody na przetwarzanie danych przez partnerów albo wykup subskrypcję bez reklam za 9,99 zł/mies.</p>
         <button onclick="done('accept')">Akceptuj i przejdź do serwisu</button> <button onclick="done('pay')">Wykup subskrypcję</button></div></div>`,
+    // Odwzorowanie wp.pl: ekran zgód → ustawienia zaawansowane → "odrzucam i płacę"
+    wp: `
+      <div style="position:fixed;inset:0;background:rgba(0,0,0,.4)" id="wpwrap"><div role="dialog" style="position:absolute;inset:40px;background:#fff;padding:20px;overflow:auto" id="wpd"></div></div>`,
     // Baner informacyjny
     info: `<div class="fixed" style="bottom:0;top:auto"><span>Ta strona używa plików cookies. Korzystając z niej zgadzasz się na ich użycie.</span> <button onclick="done('ok')">OK</button></div>`,
     // Ściana bez płatności (tylko akceptuj, pełnoekranowa)
@@ -97,12 +101,30 @@
     document.getElementById('app').innerHTML = '';
   }
   const c = params.get('case') || 'onetrust';
+  const wpScreens = {
+    main: `<h2>Cenimy Twoją prywatność</h2><p>Kliknij „AKCEPTUJĘ I PRZECHODZĘ DO SERWISU”, aby wyrazić zgodę na korzystanie w Internecie z technologii automatycznego gromadzenia danych (cookies) przez Wirtualną Polskę i Zaufanych Partnerów IAB (1037 partnerów). Możesz podjąć decyzję w ramach <span tabindex="0" onclick="wpShow('adv')" style="color:blue">ustawień zaawansowanych</span>.</p>
+      <button onclick="done('accept')">Akceptuję i przechodzę do serwisu</button> <button onclick="wpShow('pay')">Odrzucam i chcę dowiedzieć się więcej</button>`,
+    adv: `<h2>Ustawienia Zaawansowane</h2><p>Poniżej opisujemy cele i funkcje przetwarzania Twoich danych osobowych.</p>
+      ${['1. Wykorzystywanie ograniczonych danych do wyboru reklam', '2. Tworzenie profili w celu spersonalizowanych reklam', '7. Pomiar efektywności treści', '8. Rozumienie odbiorców dzięki statystyce'].map(t => `<div class="p"><div>${t}</div><div><div role="switch" class="sw" aria-checked="false" onclick="tg(this)"></div><span>Zgoda</span></div></div>`).join('')}
+      <div class="p"><div>9. Rozwój i ulepszanie usług</div><div><div role="switch" class="sw" aria-checked="true" onclick="tg(this)"></div><span>Uzasadniony interes</span></div></div>
+      <button onclick="done('accept-all')">Włączam wszystko, przechodzę do serwisu</button> <button onclick="window.__wpSaved=[...document.querySelectorAll('[role=switch]')].map(s=>s.getAttribute('aria-checked'));wpShow('pay')">Zapisuję i chcę dowiedzieć się więcej</button>`,
+    pay: `<h2>Odrzucam zgody i płacę od 5,75 do 7,50 zł / miesiąc</h2><p>Wirtualna Polska oferuje wszystkie swoje treści za darmo, tak długo, jak zarabia na reklamach. Jeśli chcesz nam uniemożliwić dopasowywanie reklam do Ciebie, dajemy alternatywę w postaci symbolicznego abonamentu.</p>
+      <button onclick="done('accept')">Nie chcę płacić, jednak akceptuję zgody</button> <button onclick="done('pay')">Nadal odrzucam, chcę zapłacić</button>`
+  };
+  function wpShow(s) { document.getElementById('wpd').innerHTML = wpScreens[s]; }
   // wstaw z opóźnieniem jak prawdziwy CMP
-  setTimeout(() => { document.getElementById('app').innerHTML = cases[c]; }, 300);
+  setTimeout(() => {
+    document.getElementById('app').innerHTML = cases[c];
+    if (c === 'wp') { wpShow('main'); document.body.style.overflow = 'hidden'; }
+  }, 300);
+  // ?ext=1 → test z prawdziwie zainstalowanym rozszerzeniem (bez stubów i bez wstrzykiwania silnika)
+  if (!params.get('ext')) {
+    (async () => {
+      for (const f of ['shared', 'rules', 'ui', 'content']) {
+        await new Promise(res => { const s = document.createElement('script'); s.src = '../src/' + f + '.js'; s.onload = res; document.body.appendChild(s); });
+      }
+    })();
+  }
 </script>
-<script src="../src/shared.js"></script>
-<script src="../src/rules.js"></script>
-<script src="../src/ui.js"></script>
-<script src="../src/content.js"></script>
 </body>
 </html>

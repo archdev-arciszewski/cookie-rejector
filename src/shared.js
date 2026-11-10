@@ -3,6 +3,9 @@
 (function (g) {
   'use strict';
 
+  // Firefox udostępnia `browser` (Promise), Chromium `chrome` — ten sam kod działa w obu.
+  const api = (g.browser && g.browser.runtime) ? g.browser : g.chrome;
+
   const CATEGORY_DEFS = [
     { key: 'necessary', label: 'Niezbędne', desc: 'Ściśle wymagane do działania strony (logowanie, koszyk, bezpieczeństwo). Zwykle nie da się ich wyłączyć.', locked: true },
     { key: 'functional', label: 'Funkcjonalne / preferencje', desc: 'Zapamiętywanie języka, regionu, ustawień, odtwarzaczy itp.' },
@@ -68,12 +71,12 @@
   }
 
   async function loadSettings() {
-    const { settings } = await chrome.storage.sync.get('settings');
+    const { settings } = await api.storage.sync.get('settings');
     return mergeSettings(settings);
   }
 
   async function saveSettings(s) {
-    await chrome.storage.sync.set({ settings: mergeSettings(s) });
+    await api.storage.sync.set({ settings: mergeSettings(s) });
   }
 
   function hostOf(url) {
@@ -90,5 +93,5 @@
     });
   }
 
-  g.CCR = { CATEGORY_DEFS, OPTIONAL_KEYS, DEFAULT_SETTINGS, mergeSettings, loadSettings, saveSettings, hostOf, hostMatches };
+  g.CCR = { api, CATEGORY_DEFS, OPTIONAL_KEYS, DEFAULT_SETTINGS, mergeSettings, loadSettings, saveSettings, hostOf, hostMatches };
 })(globalThis);

@@ -1,11 +1,13 @@
 /* Service worker: konfiguracja dla ramek, licznik na ikonie, log, decyzje dla ścian "zgoda albo płać",
  * przekazywanie promptu/toastu do ramki głównej, zamykanie kart. */
 // Chromium: service worker → importScripts. Firefox: shared.js jest już wczytany przez manifest (background.scripts).
-if (typeof importScripts === 'function' && !globalThis.CCR) importScripts('shared.js');
+if (typeof importScripts === 'function' && !globalThis.CCR) importScripts('shared.js', 'pow.js');
 const api = CCR.api;
 
 const LOG_MAX = 150;
 const pendingWalls = new Map(); // tabId -> Promise<decision>
+const REPORT_REMEMBER_MS = 90 * 864e5;
+const POW_BITS = 20;
 
 const METHOD_LABEL = {
   granular: 'Zapisano własny wybór',
@@ -60,6 +62,15 @@ async function handle(msg, sender) {
       try { return { decision: await p }; } finally { setTimeout(() => pendingWalls.delete(tabId), 3000); }
     }
 
+    case 'unhandled':
+      return onUnhandled(tabId, topUrl, msg.data);
+
+    case 'report-answer':
+      return onReportAnswer(tabId, msg.decision);
+
+    case 'report-manual':
+      return manualReport(msg.tabId, msg.url);
+
     default:
       return null;
   }
@@ -99,6 +110,116 @@ async function decideWall(tabId, host, msg) {
   return decision;
 }
 
+// ======================================================================
+// Zgłoszenia nieobsłużonych okienek
+// ======================================================================
+const REPORT_TEXT = {
+  created: 'Dziękuję! Zgłoszenie trafiło na GitHuba — obsługa pojawi się w jednej z kolejnych wersji.',
+  known: 'To okienko jest już zgłoszone — obsługa pojawi się w jednej z kolejnych wersji. Dziękuję!',
+  stored: 'Dziękuję! Zgłoszenie zostało przyjęte.',
+  'rate-limited': 'Za dużo zgłoszeń w krótkim czasie — spróbuj później.',
+  limited: 'Dzienny limit zgłoszeń został wyczerpany — spróbuj jutro.',
+  busy: 'Serwer zgłoszeń jest teraz zajęty — spróbuj za chwilę.',
+  duplicate: 'To zgłoszenie zostało już wysłane.',
+  'invalid-host': 'Nie udało się zgłosić: adres strony nie jest obsługiwany.',
+  network: 'Nie udało się połączyć z serwerem zgłoszeń.'
+};
+const reportText = r => REPORT_TEXT[r.status] || `Nie udało się wysłać zgłoszenia (${r.status}).`;
+
+function withPage(data, tabUrl) {
+  const u = new URL(tabUrl);
+  return { ...data, page: { ...(data.page || {}), host: u.hostname.toLowerCase(), path: u.pathname.slice(0, 300) } };
+}
+
+const hex = buf => Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, '0')).join('');
+/** Proof-of-work (src/pow.js): ok. sekundy obliczeń po stronie wysyłającego chroni serwer przed masowym spamem. */
+async function proofOfWork(body, bits) {
+  const bh = hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body)));
+  const ts = Date.now();
+  return { ts, nonce: CCR_POW.solve(bh, ts, bits) };
+}
+
+async function sendReport(data) {
+  const body = JSON.stringify(data);
+  let bits = POW_BITS;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const { ts, nonce } = await proofOfWork(body, bits);
+    let res;
+    try {
+      res = await fetch(CCR.REPORT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, // „prosty” request — bez preflightu CORS
+        body: `ccr1 ${ts} ${nonce} ${bits}\n${body}`,
+        credentials: 'omit',
+        referrerPolicy: 'no-referrer'
+      });
+    } catch (e) {
+      return { status: 'network' };
+    }
+    let j = {};
+    try { j = await res.json(); } catch {}
+    if (res.status === 428 && j.powBits > bits && j.powBits <= 26) { bits = j.powBits; continue; }
+    return { status: j.status || `http-${res.status}`, url: j.url || null };
+  }
+  return { status: 'pow' };
+}
+
+async function rememberReport(key, decision) {
+  const { reportedSites = {} } = await api.storage.local.get('reportedSites');
+  const now = Date.now();
+  for (const [k, v] of Object.entries(reportedSites)) if (now - v.t > REPORT_REMEMBER_MS) delete reportedSites[k];
+  if (decision) reportedSites[key] = { t: now, d: decision }; else delete reportedSites[key];
+  await api.storage.local.set({ reportedSites });
+}
+
+function reportToast(tabId, text) {
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  api.tabs.sendMessage(tabId, { type: 'toast', html: `🍪 ${esc(text)}` }, { frameId: 0 }).catch(() => {});
+}
+
+async function deliver(tabId, key, data) {
+  if (tabId != null) reportToast(tabId, 'Wysyłam zgłoszenie…');
+  const res = await sendReport(data);
+  const ok = ['created', 'known', 'stored', 'duplicate'].includes(res.status);
+  await rememberReport(key, ok ? 'sent' : null);
+  await addLog({ host: data.page.host, method: ok ? 'report' : 'report-failed', cmp: data.cmp || '', status: res.status });
+  if (tabId != null) reportToast(tabId, reportText(res));
+  return { ...res, text: reportText(res) };
+}
+
+// Dane zgłoszenia czekają w storage.session, a odpowiedź przychodzi osobną wiadomością —
+// service worker może zostać uśpiony, zanim użytkownik kliknie.
+async function onUnhandled(tabId, tabUrl, data) {
+  const settings = await CCR.loadSettings();
+  if (!settings.reportUnsupported || tabId == null || !data || !/^https?:/.test(tabUrl)) return { ok: false };
+  const key = CCR.baseDomain(CCR.hostOf(tabUrl));
+  const { reportedSites = {} } = await api.storage.local.get('reportedSites');
+  const prev = reportedSites[key];
+  if (prev && Date.now() - prev.t < REPORT_REMEMBER_MS) return { ok: false, skip: prev.d };
+  const sk = 'report_' + tabId;
+  if ((await api.storage.session.get(sk))[sk]) return { ok: false };
+  await api.storage.session.set({ [sk]: { key, data: withPage(data, tabUrl) } });
+  api.tabs.sendMessage(tabId, { type: 'report-prompt', host: key }, { frameId: 0 }).catch(() => api.storage.session.remove(sk));
+  return { ok: true };
+}
+
+async function onReportAnswer(tabId, decision) {
+  if (tabId == null) return { ok: false };
+  const sk = 'report_' + tabId;
+  const pending = (await api.storage.session.get(sk))[sk];
+  await api.storage.session.remove(sk);
+  if (!pending) return { ok: false };
+  if (decision !== 'send') { await rememberReport(pending.key, 'no'); return { ok: true }; }
+  return deliver(tabId, pending.key, pending.data);
+}
+
+async function manualReport(tabId, tabUrl) {
+  if (tabId == null || !/^https?:/.test(tabUrl || '')) return { status: 'invalid-host', text: REPORT_TEXT['invalid-host'] };
+  const r = await api.tabs.sendMessage(tabId, { type: 'collect-report' }).catch(() => null);
+  if (!r || !r.data) return { status: 'no-content', text: 'Nie udało się odczytać strony — odśwież ją i spróbuj ponownie.' };
+  return deliver(tabId, CCR.baseDomain(CCR.hostOf(tabUrl)), withPage(r.data, tabUrl));
+}
+
 async function bumpCount(tabId) {
   if (tabId == null) return;
   const key = 'count_' + tabId;
@@ -135,6 +256,7 @@ api.tabs.onUpdated.addListener((tabId, info) => {
   if (info.status === 'loading') {
     // nowa strona w karcie: porzucony (bez odpowiedzi) prompt nie może blokować kolejnych
     pendingWalls.delete(tabId);
+    api.storage.session.remove('report_' + tabId);
     api.storage.session.remove('count_' + tabId);
     api.action.setBadgeText({ tabId, text: '' });
   }

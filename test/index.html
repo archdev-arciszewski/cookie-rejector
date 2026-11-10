@@ -87,6 +87,16 @@
       <div style="position:fixed;inset:0;background:rgba(0,0,0,.4)" id="wpwrap"><div role="dialog" style="position:absolute;inset:40px;background:#fff;padding:20px;overflow:auto" id="wpd"></div></div>`,
     // Baner informacyjny
     info: `<div class="fixed" style="bottom:0;top:auto"><span>Ta strona używa plików cookies. Korzystając z niej zgadzasz się na ich użycie.</span> <button onclick="done('ok')">OK</button></div>`,
+    // Okienko cookie z przyciskami, których wtyczka nie rozpoznaje → propozycja zgłoszenia
+    unrecognized: `
+      <div class="overlay" id="unrec"><div class="box"><h2>Pliki cookie i RODO</h2>
+        <p>Ta strona używa plików cookie. Zgodnie z RODO prosimy o decyzję w sprawie przetwarzania danych przez partnerów.</p>
+        <span role="button" tabindex="0" onclick="done('dalej')">Dalej</span> <span role="button" tabindex="0" onclick="done('info')">Informacje</span></div></div>`,
+    // "Odrzuć" nie działa (okienko zostaje) → nie akceptujemy na ślepo, proponujemy zgłoszenie
+    stuck: `
+      <div class="overlay" id="stuck"><div class="box"><p>Używamy plików cookie w celach analitycznych i reklamowych.</p>
+        <button onclick="window.__rejectTried=(window.__rejectTried||0)+1">Odrzuć wszystkie</button>
+        <button onclick="done('accept')">Akceptuję</button></div></div>`,
     // Ściana bez płatności (tylko akceptuj, pełnoekranowa)
     wall: `
       <div class="overlay"><div class="box"><p>Aby korzystać z serwisu, musisz zaakceptować pliki cookie i przetwarzanie danych (RODO).</p>

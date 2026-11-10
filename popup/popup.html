@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="../options/options.css">
+  <style>
+    body { width: 320px; }
+    main { padding: 14px; }
+    header { margin-bottom: 10px; gap: 10px; }
+    header h1 { font-size: 16px; }
+    section { padding: 10px 12px; margin-bottom: 10px; }
+    .host { font-weight: 600; word-break: break-all; }
+    .stat { color: var(--muted); font-size: 13px; margin-top: 2px; }
+    .actions { flex-wrap: wrap; margin-top: 0; }
+    .actions button { flex: 1; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <img src="../icons/icon32.png" alt="" width="28" height="28">
+      <h1>Cookie Rejector</h1>
+    </header>
+    <section>
+      <div class="host" id="host">—</div>
+      <div class="stat" id="stat"></div>
+      <label class="row" style="border:0;padding-bottom:0">
+        <span><b>Działa na tej stronie</b></span>
+        <input type="checkbox" class="switch" id="siteOn">
+      </label>
+      <div id="decision" class="stat"></div>
+    </section>
+    <div class="actions">
+      <button id="rescan">Skanuj ponownie</button>
+      <button id="options">Ustawienia</button>
+    </div>
+  </main>
+  <script src="../src/shared.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

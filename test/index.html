@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>CCR test</title>
+<style>
+  body { font-family: sans-serif; margin: 0; padding: 20px; }
+  .fixed { position: fixed; left: 0; right: 0; bottom: 0; background: #eee; padding: 16px; border-top: 2px solid #999; }
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; }
+  .box { background: #fff; padding: 20px; max-width: 520px; }
+  .hidden { display: none; }
+  .sw { display: inline-block; width: 30px; height: 16px; background: #ccc; border-radius: 8px; }
+  .sw[aria-checked="true"] { background: #36c; }
+</style>
+</head>
+<body>
+<h1>Strona testowa</h1>
+<p>Treść artykułu. W stopce link do <a href="/polityka">polityki cookies</a>.</p>
+<div id="app"></div>
+<pre id="out"></pre>
+<script>
+  // ---- stub chrome API ----
+  window.__reports = [];
+  window.__walls = [];
+  const params = new URLSearchParams(location.search);
+  const settings = JSON.parse(JSON.stringify({
+    enabled: true, granular: true, fallback: 'reject', infoBanner: 'hide', notifications: true, debug: true, disabledSites: [],
+    wall: { mode: 'ask', onDecline: 'nothing', remember: true },
+    categories: { necessary: true, functional: true, analytics: false, marketing: false, personalization: false, social: false, thirdParty: false, legitimateInterest: false, other: false }
+  }));
+  if (params.get('onlyNecessary')) settings.categories.functional = false;
+  window.chrome = {
+    runtime: {
+      sendMessage: async (msg) => {
+        if (msg.type === 'init') return { settings, topHost: location.hostname, disabled: false };
+        if (msg.type === 'handled') { window.__reports.push(msg); return { ok: true }; }
+        if (msg.type === 'wall') { window.__walls.push(msg); const r = await CCR_UI.askWall({ kind: msg.kind, host: location.hostname, onDecline: 'nothing', remember: true }); return { decision: r.decision }; }
+      },
+      onMessage: { addListener() {} }
+    }
+  };
+
+  const cases = {
+    // OneTrust-podobny: baner + osobny panel z checkboxami
+    onetrust: `
+      <div class="fixed" id="cookie-banner">
+        <p>Używamy plików cookie i podobnych technologii, aby personalizować reklamy. Twoja prywatność jest ważna.</p>
+        <button id="acc" onclick="done('accept-all')">Akceptuj wszystkie</button>
+        <button onclick="document.getElementById('pc').classList.remove('hidden'); document.getElementById('cookie-banner').classList.add('hidden')">Ustawienia plików cookie</button>
+      </div>
+      <div class="overlay hidden" id="pc"><div class="box">
+        <h2>Centrum preferencji prywatności</h2>
+        <div><h4>Ściśle niezbędne pliki cookie</h4><input type="checkbox" id="c1" checked disabled><label for="c1">Zawsze aktywne</label></div>
+        <div><h4>Funkcjonalne pliki cookie</h4><p>Zapamiętują Twoje preferencje.</p><input type="checkbox" id="c3"></div>
+        <div><h4>Wydajnościowe pliki cookie</h4><p>Pozwalają liczyć odwiedziny.</p><input type="checkbox" id="c2" checked></div>
+        <div><h4>Pliki cookie do celów reklamowych</h4><input type="checkbox" id="c4" checked></div>
+        <div><h4>Media społecznościowe</h4><input type="checkbox" id="c5" checked></div>
+        <button onclick="done('save')">Zapisz ustawienia</button>
+        <button onclick="done('accept-all')">Zezwól na wszystkie</button>
+      </div></div>`,
+    // Prosty baner z "Odrzuć"
+    reject: `
+      <div class="fixed"><p>Ta strona korzysta z ciasteczek w celach analitycznych i marketingowych.</p>
+        <button onclick="done('accept')">Akceptuję</button> <button onclick="done('reject')">Odrzuć wszystkie</button></div>`,
+    // TCF z przełącznikami role=switch i zakładką uzasadnionego interesu
+    tcf: `
+      <div class="overlay" role="dialog" aria-modal="true" id="tcf"><div class="box">
+        <p>Cenimy Twoją prywatność. My i nasi partnerzy (842) przechowujemy informacje na urządzeniu (cookies) i przetwarzamy dane osobowe.</p>
+        <button onclick="done('accept')">Zgadzam się</button>
+        <button onclick="document.getElementById('purposes').classList.remove('hidden')">Więcej opcji</button>
+        <div id="purposes" class="hidden">
+          <div class="p"><b>Przechowywanie informacji na urządzeniu</b> <span class="sw" role="switch" aria-checked="false" aria-label="Zgoda" onclick="tg(this)"></span></div>
+          <div class="p"><b>Wybór spersonalizowanych reklam</b> <span class="sw" role="switch" aria-checked="false" aria-label="Zgoda" onclick="tg(this)"></span> <span class="sw" role="switch" aria-checked="true" aria-label="Uzasadniony interes" onclick="tg(this)"></span></div>
+          <div class="p"><b>Pomiar wydajności treści</b> <span class="sw" role="switch" aria-checked="false" aria-label="Zgoda" onclick="tg(this)"></span> <span class="sw" role="switch" aria-checked="true" aria-label="Uzasadniony interes" onclick="tg(this)"></span></div>
+          <div class="p"><b>Funkcjonalność</b> <span class="sw" role="switch" aria-checked="false" aria-label="Zgoda" onclick="tg(this)"></span></div>
+          <button onclick="done('save')">Zapisz i wyjdź</button>
+        </div>
+      </div></div>`,
+    // "Zgoda albo płać"
+    pay: `
+      <div class="overlay"><div class="box"><h2>Reklamy finansują nasz serwis</h2>
+        <p>Zaakceptuj cookies i zgody na przetwarzanie danych przez partnerów albo wykup subskrypcję bez reklam za 9,99 zł/mies.</p>
+        <button onclick="done('accept')">Akceptuj i przejdź do serwisu</button> <button onclick="done('pay')">Wykup subskrypcję</button></div></div>`,
+    // Baner informacyjny
+    info: `<div class="fixed" style="bottom:0;top:auto"><span>Ta strona używa plików cookies. Korzystając z niej zgadzasz się na ich użycie.</span> <button onclick="done('ok')">OK</button></div>`,
+    // Ściana bez płatności (tylko akceptuj, pełnoekranowa)
+    wall: `
+      <div class="overlay"><div class="box"><p>Aby korzystać z serwisu, musisz zaakceptować pliki cookie i przetwarzanie danych (RODO).</p>
+        <button onclick="done('accept')">Akceptuję</button></div></div>`
+  };
+  function tg(el) { el.setAttribute('aria-checked', el.getAttribute('aria-checked') === 'true' ? 'false' : 'true'); }
+  function done(what) {
+    const state = {};
+    document.querySelectorAll('input[type=checkbox]').forEach(i => state[i.id] = i.checked);
+    document.querySelectorAll('[role=switch]').forEach((s, i) => state['sw' + i] = s.getAttribute('aria-label') + ':' + s.getAttribute('aria-checked'));
+    window.__clicked = { what, state };
+    document.getElementById('app').innerHTML = '';
+  }
+  const c = params.get('case') || 'onetrust';
+  // wstaw z opóźnieniem jak prawdziwy CMP
+  setTimeout(() => { document.getElementById('app').innerHTML = cases[c]; }, 300);
+</script>
+<script src="../src/shared.js"></script>
+<script src="../src/rules.js"></script>
+<script src="../src/ui.js"></script>
+<script src="../src/content.js"></script>
+</body>
+</html>

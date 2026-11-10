@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cookie Rejector — ustawienia</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main>
+    <header>
+      <img src="../icons/icon48.png" alt="" width="40" height="40">
+      <div>
+        <h1>Cookie Rejector</h1>
+        <p class="sub">Automatycznie odrzuca zgody cookie. Ustawienia zapisują się od razu.</p>
+      </div>
+      <span id="saved" class="saved" aria-live="polite"></span>
+    </header>
+
+    <section>
+      <label class="row big">
+        <span><b>Wtyczka włączona</b><small>Wyłącz, żeby chwilowo nie obsługiwać żadnych banerów.</small></span>
+        <input type="checkbox" class="switch" data-path="enabled">
+      </label>
+    </section>
+
+    <section>
+      <h2>Kategorie zgód</h2>
+      <p class="hint">Włączone = wtyczka zostawia zgodę. Wyłączone = odrzuca / zgłasza sprzeciw.</p>
+      <div id="cats"></div>
+    </section>
+
+    <section>
+      <h2>Sposób działania</h2>
+      <label class="row">
+        <span><b>Ustawiaj kategorie szczegółowo</b><small>Otwiera „Ustawienia/Dostosuj” na banerze, przestawia przełączniki zgodnie z kategoriami powyżej i zapisuje wybór.</small></span>
+        <input type="checkbox" class="switch" data-path="granular">
+      </label>
+      <label class="row">
+        <span><b>Gdy szczegółowe ustawienie się nie uda</b><small>Np. brak przełączników lub przycisku „Zapisz”.</small></span>
+        <select data-path="fallback">
+          <option value="reject">Kliknij „Odrzuć wszystkie”</option>
+          <option value="none">Nic nie rób</option>
+        </select>
+      </label>
+      <label class="row">
+        <span><b>Banery informacyjne</b><small>Nieblokujące paski z samym „OK / Rozumiem”, bez opcji odrzucenia.</small></span>
+        <select data-path="infoBanner">
+          <option value="hide">Ukryj (bez wyrażania zgody)</option>
+          <option value="accept">Kliknij „OK”</option>
+          <option value="ignore">Zostaw</option>
+        </select>
+      </label>
+      <label class="row">
+        <span><b>Powiadomienia</b><small>Mały, nieklikalny dymek w rogu strony po obsłużeniu banera.</small></span>
+        <input type="checkbox" class="switch" data-path="notifications">
+      </label>
+    </section>
+
+    <section>
+      <h2>Ściany „zgoda albo płać” i wymuszona akceptacja</h2>
+      <p class="hint">Strony, na których nie da się odrzucić cookies — trzeba zaakceptować albo wykupić subskrypcję.</p>
+      <label class="row">
+        <span><b>Co robić</b></span>
+        <select data-path="wall.mode">
+          <option value="ask">Zapytaj mnie</option>
+          <option value="accept">Zawsze akceptuj</option>
+          <option value="decline">Zawsze odmawiaj</option>
+        </select>
+      </label>
+      <label class="row">
+        <span><b>Po odmowie</b></span>
+        <select data-path="wall.onDecline">
+          <option value="nothing">Nic nie rób (zostaw stronę)</option>
+          <option value="close">Zamknij kartę</option>
+        </select>
+      </label>
+      <label class="row">
+        <span><b>Domyślnie zapamiętuj decyzję dla domeny</b><small>Stan pola „Zapamiętaj” w okienku z pytaniem.</small></span>
+        <input type="checkbox" class="switch" data-path="wall.remember">
+      </label>
+      <h3>Zapamiętane decyzje</h3>
+      <div id="decisions" class="list"></div>
+    </section>
+
+    <section>
+      <h2>Wyłączone strony</h2>
+      <p class="hint">Jedna domena w linii (obejmuje subdomeny), np. <code>example.com</code>.</p>
+      <textarea id="disabledSites" rows="5" spellcheck="false" placeholder="example.com"></textarea>
+    </section>
+
+    <section>
+      <h2>Ostatnie działania</h2>
+      <div id="log" class="list"></div>
+      <div class="actions">
+        <button id="clearLog" class="ghost">Wyczyść log</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Zaawansowane</h2>
+      <label class="row">
+        <span><b>Tryb debugowania</b><small>Szczegóły w konsoli strony (F12) z prefiksem [CookieRejector].</small></span>
+        <input type="checkbox" class="switch" data-path="debug">
+      </label>
+      <div class="actions">
+        <button id="reset" class="ghost danger">Przywróć ustawienia domyślne</button>
+      </div>
+    </section>
+  </main>
+  <script src="../src/shared.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

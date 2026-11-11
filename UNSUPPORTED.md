@@ -6,4 +6,8 @@ Gdy obsługa zostanie dodana, plik przypadku usuwa się w PR z poprawką i odśw
 
 > Plik generowany automatycznie (`python tools/unsupported_list.py`). Nie edytuj go ręcznie.
 
-_Brak zgłoszeń._
+Przypadków: **1**
+
+| Domena | Zgłoszono | CMP | Problem | Szczegóły |
+|---|---|---|---|---|
+| github.com | 2026-11-11 | — | odrzucenie / ustawienia nie zadziałały | [github.com.md](unsupported/github.com.md) |

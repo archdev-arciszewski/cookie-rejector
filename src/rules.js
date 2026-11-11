@@ -146,7 +146,11 @@
       reject: '.cn-decline, .cm-btn-decline', settings: '.cn-learn-more', save: '.cm-btn-accept:not(.cm-btn-accept-all)', accept: '.cm-btn-accept-all, .cm-btn-success' },
     { name: 'Osano', detect: '.osano-cm-window', reject: '.osano-cm-denyAll, .osano-cm-deny', settings: '.osano-cm-manage', save: '.osano-cm-save', accept: '.osano-cm-accept-all' },
     { name: 'iubenda', detect: '#iubenda-cs-banner', reject: '.iubenda-cs-reject-btn', settings: '.iubenda-cs-customize-btn', accept: '.iubenda-cs-accept-btn' },
-    { name: 'consentmanager', detect: '#cmpbox', reject: '.cmpboxbtnno', settings: '.cmpboxbtncustom', save: '.cmpboxbtnsave', accept: '.cmpboxbtnyes' },
+    { name: 'consentmanager', detect: '#cmpbox',
+      // warstwa ustawień: „Zapisz i wyjdź” ma też klasę .cmpboxbtnyes, a „Odrzuć wszystko” to .cmpboxbtnreject
+      reject: '.cmpboxbtnno, .cmpboxbtnreject, .cmptxt_btn_no', settings: '.cmpboxbtncustom',
+      save: '.cmpboxbtnsave, .cmpboxbtnyescustomchoices, .cmptxt_btn_save',
+      accept: '.cmpboxbtnyes:not(.cmpboxbtnyescustomchoices):not(.cmptxt_btn_save)' },
     { name: 'Borlabs', detect: '#BorlabsCookieBox ._brlbs-block-content, #BorlabsCookieBox .brlbs-cmpnt-dialog', reject: '._brlbs-refuse-btn a, ._brlbs-refuse a, [data-cookie-refuse]', settings: '[data-cookie-individual]' },
     { name: 'Axeptio', detect: '#axeptio_overlay .axeptio_widget, #axeptio_main_button', reject: '#axeptio_btn_dismiss', settings: '#axeptio_btn_configure', accept: '#axeptio_btn_acceptAll' },
     { name: 'CookieFirst', detect: '.cookiefirst-root', reject: '[data-cookiefirst-action="reject"]', settings: '[data-cookiefirst-action="adjust"]', save: '[data-cookiefirst-action="save"]', accept: '[data-cookiefirst-action="accept"]' },

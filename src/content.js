@@ -245,8 +245,12 @@
 
   function getToggles(root) {
     const list = deepQueryAll(root, TOGGLE_SEL);
-    // usuń zagnieżdżone (np. input wewnątrz [role=switch])
-    return list.filter(el => !list.some(o => o !== el && o.contains(el))).slice(0, 3000);
+    // usuń zagnieżdżone (np. input wewnątrz [role=switch]); przodkowie zamiast porównań każdy z każdym (setki vendorów)
+    const set = new Set(list);
+    return list.filter(el => {
+      for (let p = el.parentElement; p; p = p.parentElement) if (set.has(p)) return false;
+      return true;
+    }).slice(0, 3000);
   }
 
   function toggleState(el) {
@@ -269,8 +273,13 @@
     return h ? norm(h.innerText || h.textContent).slice(0, 160) : '';
   }
 
+  let toggleCounts = null; // pamięć podręczna na czas jednego przejścia po przełącznikach
   function countToggles(el) {
-    try { return el.querySelectorAll(TOGGLE_SEL).length; } catch { return 0; }
+    if (toggleCounts && toggleCounts.has(el)) return toggleCounts.get(el);
+    let n = 0;
+    try { n = el.querySelectorAll(TOGGLE_SEL).length; } catch { /* ignore */ }
+    if (toggleCounts) toggleCounts.set(el, n);
+    return n;
   }
 
   /** Ustala kategorię przełącznika na podstawie etykiety i najbliższego kontekstu. */
@@ -354,11 +363,14 @@
   async function applyToggles(panel, prefs) {
     const toggles = getToggles(panel);
     const res = { found: 0, changed: 0, cats: {} };
-    for (const t of toggles) {
+    // najpierw kategorie (bez klikania: układ strony się nie zmienia), potem kliknięcia
+    toggleCounts = new WeakMap();
+    let plan;
+    try {
+      plan = toggles.filter(t => !toggleDisabled(t)).map(t => [t, toggleCategory(t)]).filter(([, cat]) => cat !== 'skip');
+    } finally { toggleCounts = null; }
+    for (const [t, cat] of plan) {
       checkAbort();
-      if (toggleDisabled(t)) continue;
-      const cat = toggleCategory(t);
-      if (cat === 'skip') continue;
       const want = cat === 'necessary' ? true : !!prefs[cat];
       res.found++;
       res.cats[cat] = want;
@@ -401,7 +413,11 @@
   async function handleLegitimateInterest(panel, prefs, result) {
     if (prefs.legitimateInterest) return;
     const cands = deepQueryAll(panel, 'button, [role="tab"], [role="button"], a').filter(e => isVisible(e) && !navigatesAway(e));
-    const tabs = cands.filter(e => { const t = labelOf(e); return t.length < 60 && any(t, R.CAT.legitimateInterest) && !any(t, R.BTN_OBJECT_ALL); });
+    const tabs = cands.filter(e => {
+      if (!norm(e.innerText || '')) return false; // zakładka ma widoczny tekst; ikony z aria-label (np. „Opis: …”) to nie zakładki
+      const t = labelOf(e);
+      return t.length < 60 && any(t, R.CAT.legitimateInterest) && !any(t, R.BTN_OBJECT_ALL);
+    });
     for (const tab of tabs.slice(0, 2)) {
       await click(tab);
       await sleep(400);
@@ -422,6 +438,15 @@
     'cookie', 'consent', 'gdpr', 'rodo', 'cmp', 'privacy', 'ciastecz', 'ciastk', 'tracking', 'banner', 'notice'
   ].flatMap(w => [`[id*="${w}" i]`, `[class*="${w}" i]`])
     .concat(['[role="dialog"]', '[role="alertdialog"]', '[aria-modal="true"]', 'dialog[open]']).join(',');
+
+  /** Kontener całej strony (np. powłoka aplikacji GitHuba), w którym „Manage cookies” to tylko link w stopce. */
+  function isPageShell(el) {
+    try {
+      if (el.querySelector('main, [role="main"]')) return true;
+      return !!(el.querySelector('nav, [role="navigation"]') && el.querySelector('footer, [role="contentinfo"]') &&
+        el.querySelector('header, [role="banner"]'));
+    } catch { return false; }
+  }
 
   function hasButtons(b) {
     return b.reject.length + b.accept.length + b.settings.length + b.save.length > 0;
@@ -454,6 +479,7 @@
       const floating = isFloating(el);
       const staticOk = score >= 5 && text.length < 2000 && parentOf(el) === document.body;
       if (!floating && !staticOk) continue;
+      if (isPageShell(el)) continue;
       if (!hasButtons(analyze(el))) continue;
       good.push(el);
     }
@@ -605,7 +631,7 @@
     for (const el of cands) {
       if (el === document.body || el === document.documentElement) continue;
       if (el.id && el.id.startsWith('ccr-')) continue;
-      if (!isVisible(el) || !isFloating(el)) continue;
+      if (!isVisible(el) || !isFloating(el) || isPageShell(el)) continue;
       const text = norm(deepText(el));
       if (text.length < 40 || text.length > 4000) continue;
       const sc = cookieScore(text);

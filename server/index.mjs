@@ -35,6 +35,7 @@ export const CFG = {
   ipPerDay: +env.IP_PER_DAY || 12,
   prPerDay: +env.PR_PER_DAY || 25,
   maxOpenPrs: +env.MAX_OPEN_PRS || 40,
+  recheckMs: (+env.RECHECK_HOURS || 6) * 3600e3, // jak często sprawdzać, czy zgłoszenie znanej domeny jest nadal otwarte
   maxQueue: +env.MAX_QUEUE || 20,
   checkDns: env.CHECK_DNS !== '0',
   maxBody: 48 * 1024
@@ -309,10 +310,52 @@ async function installationToken() {
 
 const today = () => new Date().toISOString().slice(0, 10);
 
+/** Porównanie wersji „0.3.10” > „0.3.9”. */
+export function cmpVer(a, b) {
+  const x = String(a || '0').split('.').map(Number), y = String(b || '0').split('.').map(Number);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    const d = (x[i] || 0) - (y[i] || 0);
+    if (d) return Math.sign(d);
+  }
+  return 0;
+}
+
+/** Czy zgłoszenie domeny jest nadal otwarte: plik w gałęzi bazowej albo otwarty PR report/<domena>. */
+async function reportOpen(key, tok) {
+  const R = `/repos/${CFG.owner}/${CFG.repo}`;
+  const inBase = await gh('GET', `${R}/contents/unsupported/${key}.md?ref=${CFG.base}`, null, tok);
+  if (inBase.status === 200) return true;
+  if (inBase.status !== 404) throw new Error(`plik w ${CFG.base} (${inBase.status})`);
+  const prs = await gh('GET', `${R}/pulls?state=open&head=${encodeURIComponent(`${CFG.owner}:report/${key}`)}`, null, tok);
+  if (prs.status !== 200) throw new Error(`lista PR (${prs.status})`);
+  return prs.data.some(p => p.head && p.head.ref === `report/${key}`);
+}
+
+/** Wersja wtyczki w gałęzi bazowej (z manifest.json) — w niej zgłoszenie zostało obsłużone. */
+async function baseVersion(tok) {
+  const r = await gh('GET', `/repos/${CFG.owner}/${CFG.repo}/contents/manifest.json?ref=${CFG.base}`, null, tok);
+  if (r.status !== 200) return null;
+  try { return JSON.parse(Buffer.from(r.data.content, 'base64').toString()).version || null; } catch { return null; }
+}
+
 async function submit(rep) {
   const key = baseDomain(rep.page.host);
   const st = loadState();
-  const known = st.keys[key];
+  let known = st.keys[key];
+  // znana domena: co RECHECK_HOURS sprawdzamy, czy zgłoszenie nie zostało zamknięte (obsługa dodana)
+  if (known && !known.pending && !known.fixedIn && configured() && Date.now() - (known.checked || 0) > CFG.recheckMs) {
+    known.checked = Date.now(); saveState();
+    try {
+      const tok = await installationToken();
+      if (!(await reportOpen(key, tok))) {
+        known.fixedIn = (await baseVersion(tok)) || '0';
+        saveState();
+        log('zgłoszenie zamknięte', key, 'obsługa od wersji', known.fixedIn);
+      }
+    } catch (e) { log('sprawdzanie zgłoszenia', key, e.message); }
+  }
+  // obsłużona domena: stare wersje wtyczki dostają „known”, nowsze zgłaszają ją od nowa (regresja)
+  if (known && known.fixedIn && cmpVer(rep.ext, known.fixedIn) >= 0) { delete st.keys[key]; saveState(); known = null; }
   if (known) { known.count = (known.count || 1) + 1; known.last = today(); saveState(); return { status: 'known', url: known.url }; }
 
   if (!configured()) {
@@ -328,12 +371,11 @@ async function submit(rep) {
 async function createPr(rep, key) {
   const st = loadState();
   if (st.daily.date !== today()) st.daily = { date: today(), prs: 0 };
-  if (st.daily.prs >= CFG.prPerDay) return { status: 'limited' };
 
   const tok = await installationToken();
   const R = `/repos/${CFG.owner}/${CFG.repo}`;
   const file = `unsupported/${key}.md`;
-  const mark = url => { st.keys[key] = { url, first: today(), count: 1 }; saveState(); return { status: 'known', url }; };
+  const mark = url => { st.keys[key] = { url, first: today(), count: 1, checked: Date.now() }; saveState(); return { status: 'known', url }; };
 
   const inBase = await gh('GET', `${R}/contents/${file}?ref=${CFG.base}`, null, tok);
   if (inBase.status === 200) return mark(inBase.data.html_url);
@@ -343,13 +385,19 @@ async function createPr(rep, key) {
   const reportPrs = prs.data.filter(p => p.head && p.head.ref.startsWith('report/'));
   const existing = reportPrs.find(p => p.head.ref === `report/${key}`);
   if (existing) return mark(existing.html_url);
-  if (reportPrs.length >= CFG.maxOpenPrs) return { status: 'limited' };
+  if (reportPrs.length >= CFG.maxOpenPrs || st.daily.prs >= CFG.prPerDay) return { status: 'limited' };
 
   const ref = await gh('GET', `${R}/git/ref/heads/${CFG.base}`, null, tok);
   if (ref.status !== 200) throw new Error(`ref ${CFG.base} (${ref.status})`);
   const branch = `report/${key}`;
-  const mk = await gh('POST', `${R}/git/refs`, { ref: `refs/heads/${branch}`, sha: ref.data.object.sha }, tok);
-  if (mk.status === 422) return mark(`${CFG.web}/${CFG.owner}/${CFG.repo}/tree/${branch}`);
+  let mk = await gh('POST', `${R}/git/refs`, { ref: `refs/heads/${branch}`, sha: ref.data.object.sha }, tok);
+  if (mk.status === 422) {
+    // gałąź po zamkniętym zgłoszeniu (bez otwartego PR) — usuwamy i zakładamy od nowa
+    const del = await gh('DELETE', `${R}/git/refs/heads/${branch}`, null, tok);
+    if (del.status !== 204) return mark(`${CFG.web}/${CFG.owner}/${CFG.repo}/tree/${branch}`);
+    log('usunięto starą gałąź', branch);
+    mk = await gh('POST', `${R}/git/refs`, { ref: `refs/heads/${branch}`, sha: ref.data.object.sha }, tok);
+  }
   if (mk.status !== 201) throw new Error(`gałąź (${mk.status})`);
 
   const md = renderMd(rep, key, today());

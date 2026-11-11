@@ -21,6 +21,12 @@ Odpowiedzi (`status`): `created` (nowy PR), `known` (domena już zgłoszona, `ur
 (aplikacja GitHub jeszcze nieskonfigurowana — zgłoszenie czeka w `pending/`), `limited`, `busy`, `rate-limited`,
 `duplicate`, `pow`, `pow-invalid`, `clock`, `invalid`, `invalid-host`.
 
+Zamknięte zgłoszenia: przy zgłoszeniu znanej domeny serwer co `RECHECK_HOURS` sprawdza, czy zgłoszenie jest
+nadal otwarte (plik `unsupported/<domena>.md` w `main` albo otwarty PR `report/<domena>`). Jeśli nie, zapamiętuje
+wersję z `manifest.json` w `main` jako wersję z poprawką. Wtyczki starsze od niej dostają `known` (poprawka czeka
+na aktualizację), a zgłoszenie z wersji z poprawką lub nowszej otwiera nowy PR (regresja). Stara gałąź
+`report/<domena>` jest wtedy usuwana i zakładana od nowa.
+
 Inne endpointy: `GET /health`, `GET /setup?token=…` i `GET /setup/callback` (jednorazowe tworzenie GitHub App).
 
 ## Ochrona przed spamem i DDoS
@@ -49,6 +55,7 @@ Adresy IP są trzymane tylko w pamięci (na potrzeby limitów) i nie trafiają d
 | `TRUSTED_PROXIES` | — | prefiksy adresów proxy, po przecinku; puste = tryb deweloperski |
 | `POW_BITS` | `20` | trudność proof-of-work |
 | `IP_PER_10M`, `IP_PER_DAY`, `PR_PER_DAY`, `MAX_OPEN_PRS`, `MAX_QUEUE` | `4`, `12`, `25`, `40`, `20` | limity |
+| `RECHECK_HOURS` | `6` | jak często sprawdzać, czy zgłoszenie znanej domeny zostało zamknięte |
 | `CHECK_DNS` | `1` | `0` wyłącza sprawdzanie domeny w DNS (testy) |
 
 ## Wdrożenie (mikrus ted160)

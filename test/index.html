@@ -97,6 +97,20 @@
       <div class="overlay" id="stuck"><div class="box"><p>Używamy plików cookie w celach analitycznych i reklamowych.</p>
         <button onclick="window.__rejectTried=(window.__rejectTried||0)+1">Odrzuć wszystkie</button>
         <button onclick="done('accept')">Akceptuję</button></div></div>`,
+    // Obsługa trwa za długo (np. g2a.com: setki przełączników partnerów, które nie reagują na kliknięcie)
+    // → przerwanie po limicie czasu, bez dalszych kliknięć, i propozycja zgłoszenia
+    slow: `
+      <div class="overlay" id="slow"><div class="box" style="max-height:80vh;overflow:auto"><p>Używamy plików cookie w celach analitycznych i reklamowych. Wybierz partnerów.</p>
+        <button onclick="document.getElementById('slowp').style.display='block'">Ustawienia</button>
+        <button onclick="done('accept')">Akceptuję wszystkie</button>
+        <div id="slowp" style="display:none"><button onclick="">Zapisz wybór</button>
+          ${Array.from({ length: 600 }, (_, i) => `<div>Partner reklamowy ${i + 1} <span role="switch" aria-checked="true" tabindex="0" onclick="window.__toggleClicks=(window.__toggleClicks||0)+1">wł.</span></div>`).join('')}
+        </div></div></div>`,
+    // "Odrzuć" pozornie działa: okienko znika i po chwili wraca → propozycja zgłoszenia
+    reappear: `
+      <div class="overlay" id="reap"><div class="box"><p>Używamy plików cookie w celach analitycznych i reklamowych.</p>
+        <button onclick="window.__rejectTried=(window.__rejectTried||0)+1;const o=document.getElementById('reap');o.style.display='none';setTimeout(()=>o.style.display='',1000)">Odrzuć wszystkie</button>
+        <button onclick="done('accept')">Akceptuję</button></div></div>`,
     // Ściana bez płatności (tylko akceptuj, pełnoekranowa)
     wall: `
       <div class="overlay"><div class="box"><p>Aby korzystać z serwisu, musisz zaakceptować pliki cookie i przetwarzanie danych (RODO).</p>

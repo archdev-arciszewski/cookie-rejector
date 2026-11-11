@@ -6,4 +6,8 @@ Gdy obsługa zostanie dodana, plik przypadku usuwa się w PR z poprawką i odśw
 
 > Plik generowany automatycznie (`python tools/unsupported_list.py`). Nie edytuj go ręcznie.
 
-_Brak zgłoszeń._
+Przypadków: **1**
+
+| Domena | Zgłoszono | CMP | Problem | Szczegóły |
+|---|---|---|---|---|
+| g2a.com | 2026-11-11 | consentmanager | odrzucenie / ustawienia nie zadziałały | [g2a.com.md](unsupported/g2a.com.md) |

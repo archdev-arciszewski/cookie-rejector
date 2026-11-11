@@ -18,7 +18,7 @@ const S = await import('./index.mjs');
 // ---- atrapa GitHuba ----
 const { privateKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
 const pem = privateKey.export({ type: 'pkcs1', format: 'pem' });
-const gh = { branches: new Set(), files: {}, prs: [], calls: [] };
+const gh = { branches: new Set(), files: {}, prs: [], calls: [], version: '0.3.0' };
 const mock = http.createServer((req, res) => {
   let body = '';
   req.on('data', c => body += c);
@@ -35,8 +35,19 @@ const mock = http.createServer((req, res) => {
       return j(201, { token: 'ghs_test', expires_at: new Date(Date.now() + 3600e3).toISOString() });
     }
     assert.equal(req.headers.authorization, 'Bearer ghs_test');
+    if (req.method === 'GET' && p === `${R}/contents/manifest.json`) {
+      return j(200, { content: Buffer.from(JSON.stringify({ version: gh.version })).toString('base64') });
+    }
     if (req.method === 'GET' && p.startsWith(`${R}/contents/`)) return j(404, {});
-    if (req.method === 'GET' && p === `${R}/pulls`) return j(200, gh.prs.map(x => ({ head: { ref: x.head }, html_url: x.url })));
+    if (req.method === 'GET' && p === `${R}/pulls`) {
+      const head = u.searchParams.get('head');
+      return j(200, gh.prs.filter(x => !x.closed && (!head || head.endsWith(':' + x.head))).map(x => ({ head: { ref: x.head }, html_url: x.url })));
+    }
+    if (req.method === 'DELETE' && p.startsWith(`${R}/git/refs/heads/`)) {
+      const ref = 'refs/heads/' + p.slice(`${R}/git/refs/heads/`.length);
+      if (!gh.branches.delete(ref)) return j(422, {});
+      res.writeHead(204); return res.end();
+    }
     if (req.method === 'GET' && p === `${R}/git/ref/heads/main`) return j(200, { object: { sha: 'abc' } });
     if (req.method === 'POST' && p === `${R}/git/refs`) {
       const ref = JSON.parse(body).ref;
@@ -202,6 +213,40 @@ await t('dzienny limit PR-ów', async () => {
   // PR_PER_DAY=3: utworzone już 2 (example-news.pl, dup-site.com)
   assert.equal((await post(rep('third-site.com'))).status, 'created');
   assert.equal((await post(rep('fourth-site.com'))).status, 'limited');
+});
+
+await t('cmpVer', () => {
+  assert.equal(S.cmpVer('0.3.10', '0.3.9'), 1);
+  assert.equal(S.cmpVer('0.3.2', '0.3.2'), 0);
+  assert.equal(S.cmpVer('0.3.1', '0.3.2'), -1);
+  assert.equal(S.cmpVer('', '0.3.2'), -1);
+});
+
+await t('znana domena z otwartym PR po czasie sprawdzenia → nadal known', async () => {
+  S.CFG.recheckMs = 0;
+  const before = gh.prs.length;
+  const r = await post(rep('www.dup-site.com', { text: 'inne' }));
+  assert.equal(r.status, 'known');
+  assert.equal(gh.prs.length, before);
+});
+
+await t('zamknięte zgłoszenie: starsza wersja → known, wersja z poprawką → nowy PR', async () => {
+  S.CFG.prPerDay = 10;
+  gh.prs[0].closed = true; // example-news.pl obsłużone w 0.3.2
+  gh.version = '0.3.2';
+  const before = gh.prs.length;
+  const old = await post(rep('www.example-news.pl', { ext: '0.3.1' }));
+  assert.equal(old.status, 'known');
+  assert.equal(old.url, gh.prs[0].url);
+  assert.equal(gh.prs.length, before);
+  const calls = gh.calls.length;
+  const fresh = await post(rep('www.example-news.pl', { ext: '0.3.2' }));
+  assert.equal(fresh.status, 'created');
+  assert.equal(gh.prs.length, before + 1);
+  assert.equal(gh.prs.at(-1).head, 'report/example-news.pl');
+  assert.ok(gh.calls.slice(calls).some(c => c.startsWith('DELETE ') && c.endsWith('/report/example-news.pl')), 'stara gałąź usunięta');
+  S.CFG.recheckMs = 6 * 3600e3;
+  assert.equal((await post(rep('www.example-news.pl', { ext: '0.3.2', text: 'jeszcze raz' }))).status, 'known');
 });
 
 await t('zaległe zgłoszenia są wysyłane po konfiguracji (flushPending)', async () => {

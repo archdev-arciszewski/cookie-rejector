@@ -37,5 +37,14 @@ const $ = s => document.querySelector(s);
     if (tab) await api.tabs.sendMessage(tab.id, { type: 'rescan' }).catch(() => {});
     window.close();
   };
+  const rep = $('#report');
+  rep.disabled = !host || !tab;
+  rep.onclick = async () => {
+    rep.disabled = true;
+    $('#reportStatus').textContent = 'Wysyłanie… (to potrwa kilka sekund)';
+    const r = await api.runtime.sendMessage({ type: 'report-manual', tabId: tab.id, url: tab.url }).catch(() => null);
+    $('#reportStatus').textContent = (r && r.text) || 'Nie udało się wysłać zgłoszenia.';
+  };
+
   $('#options').onclick = () => { api.runtime.openOptionsPage(); window.close(); };
 })();

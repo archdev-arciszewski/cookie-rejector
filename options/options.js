@@ -7,7 +7,8 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 
 const METHOD = {
   granular: 'własny wybór', reject: 'odrzucono', api: 'API CMP', hidden: 'ukryto baner', 'info-accept': 'OK na banerze',
-  'wall-accept': 'ściana: zaakceptowano', 'wall-decline': 'ściana: odmówiono'
+  'wall-accept': 'ściana: zaakceptowano', 'wall-decline': 'ściana: odmówiono',
+  report: 'zgłoszono okienko', 'report-failed': 'zgłoszenie nieudane'
 };
 
 function getPath(obj, path) { return path.split('.').reduce((o, k) => o && o[k], obj); }

@@ -19,6 +19,9 @@
   let attempts = 0;
   let busy = false;
   let wallAsked = false;
+  let reported = false;
+  let unrecognizedChecks = 0;
+  let startedAt = Date.now();
   let observer = null;
   let scanTimer = null;
   const handledRoots = new WeakSet();
@@ -504,6 +507,108 @@
   }
 
   // ======================================================================
+  // Zgłaszanie okienek, których nie umiemy obsłużyć
+  // ======================================================================
+  const clean = (s, n) => String(s || '').replace(/[ \t ]+/g, ' ').replace(/\s*\n\s*/g, '\n').trim().slice(0, n);
+  const oneLine = (s, n) => clean(s, 4 * n).replace(/\n/g, ' ').slice(0, n);
+
+  function toggleLabel(el) {
+    const al = el.getAttribute('aria-label') || '';
+    let row = el, p = parentOf(el), k = 0;
+    while (p && p !== document.body && k++ < 8 && countToggles(p) <= 1) { row = p; p = parentOf(p); }
+    const t = oneLine(row.innerText || row.textContent, 100);
+    if (!t) return oneLine(al, 100);
+    return oneLine(al && !t.toLowerCase().includes(al.toLowerCase()) ? `${al} — ${t}` : t, 100);
+  }
+
+  /** Skrót struktury DOM okienka: tagi, id, klasy, role — bez treści. */
+  function outline(root, maxNodes = 160, maxDepth = 7) {
+    const out = [];
+    const walk = (el, d) => {
+      if (out.length >= maxNodes || d > maxDepth || !el.tagName) return;
+      if (/^(script|style|noscript|template|svg|path|link|meta)$/i.test(el.tagName)) return;
+      let s = el.tagName.toLowerCase();
+      if (el.id) s += '#' + oneLine(el.id, 40);
+      const cls = typeof el.className === 'string' ? el.className.trim().split(/\s+/).filter(Boolean).slice(0, 3) : [];
+      if (cls.length) s += '.' + cls.map(c => oneLine(c, 30)).join('.');
+      for (const a of ['role', 'aria-modal', 'type', 'aria-checked']) {
+        if (el.hasAttribute(a)) s += `[${a}=${oneLine(el.getAttribute(a), 20)}]`;
+      }
+      if (el.shadowRoot) s += ' (shadow)';
+      out.push('  '.repeat(d) + s);
+      for (const c of [...(el.shadowRoot ? el.shadowRoot.children : []), ...el.children]) walk(c, d + 1);
+    };
+    walk(root, 0);
+    if (out.length >= maxNodes) out.push('…');
+    return out.join('\n').slice(0, 6000);
+  }
+
+  function browserName() {
+    const ua = navigator.userAgent;
+    for (const [k, name] of [['Edg', 'Edge'], ['OPR', 'Opera'], ['CCleaner', 'CCleaner'], ['Firefox', 'Firefox'], ['Chrome', 'Chrome']]) {
+      const m = new RegExp(k + '/(\\d+)').exec(ua);
+      if (m) return `${name} ${m[1]}`;
+    }
+    return 'inna';
+  }
+
+  /** Dane zgłoszenia. Adres strony uzupełnia background (z adresu karty, bez parametrów). */
+  function collectReport(root, panel, cmp, reason) {
+    const scope = (panel && isShown(panel)) ? panel : root;
+    const buttons = scope ? actionables(scope).filter(isVisible).slice(0, 40).map(el => ({
+      t: oneLine(el.tagName === 'INPUT' ? el.value : (el.innerText || el.getAttribute('aria-label') || el.getAttribute('title')), 100),
+      c: classifyButton(labelOf(el))
+    })).filter(b => b.t) : [];
+    const toggles = scope ? getToggles(scope).slice(0, 60).map(el => {
+      const cat = toggleCategory(el);
+      return { t: toggleLabel(el), on: toggleState(el), dis: !!toggleDisabled(el), cat: cat === 'skip' ? null : cat };
+    }) : [];
+    return {
+      v: 1,
+      ext: api.runtime.getManifest().version,
+      browser: browserName(),
+      reason,
+      cmp: cmp ? cmp.name : '',
+      page: { frameHost: location.hostname, lang: (document.documentElement.lang || '').slice(0, 20), top: IS_TOP },
+      blocking: scope ? !!isBlocking(scope) : false,
+      text: scope ? clean(deepText(scope), 5000) : '',
+      buttons,
+      toggles,
+      outline: scope ? outline(scope) : ''
+    };
+  }
+
+  async function offerReport(root, panel, cmp, reason) {
+    if (reported || !settings.reportUnsupported) return;
+    reported = true;
+    await sleep(2000); // okienko mogło zniknąć z opóźnieniem — wtedy to nie jest problem
+    if (!isShown(root) && !(panel && isShown(panel))) { reported = false; return; }
+    let data;
+    try { data = collectReport(root, panel, cmp, reason); } catch (e) { log('report: błąd zbierania', e); return; }
+    log('nieobsłużone okienko', reason, data);
+    send({ type: 'unhandled', data });
+  }
+
+  /** Okienko wyglądające na zgodę cookie, w którym nie rozpoznaliśmy żadnego przycisku. */
+  function findUnrecognized(minScore = 6) {
+    let best = null, bestScore = 0;
+    const cands = new Set(deepQueryAll(document, CAND_SEL));
+    if (document.body) for (const el of document.body.querySelectorAll(':scope > *, :scope > * > *')) cands.add(el);
+    for (const el of cands) {
+      if (el === document.body || el === document.documentElement) continue;
+      if (el.id && el.id.startsWith('ccr-')) continue;
+      if (!isVisible(el) || !isFloating(el)) continue;
+      const text = norm(deepText(el));
+      if (text.length < 40 || text.length > 4000) continue;
+      const sc = cookieScore(text);
+      if (sc < minScore) continue;
+      if (!actionables(el).some(isVisible)) continue;
+      if (sc > bestScore || (sc === bestScore && best && containsDeep(el, best))) { best = el; bestScore = sc; }
+    }
+    return best;
+  }
+
+  // ======================================================================
   // Obsługa banera
   // ======================================================================
   function summarizeCats(cats) {
@@ -634,11 +739,18 @@
     // 4) brak opcji odrzucenia → ściana cookies / „zgoda albo płać” / baner informacyjny
     const scope = (panel && isVisible(panel)) ? panel : root;
     b = analyze(scope, cmp);
-    if (!b.accept.length) { log('brak przycisków do obsłużenia'); return; }
+    if (!b.accept.length) {
+      log('brak przycisków do obsłużenia');
+      offerReport(root, panel, cmp, (b.reject.length || b.settings.length) ? 'reject-failed' : 'no-accept');
+      return;
+    }
     const text = norm(deepText(scope));
     const pay = b.pay.length > 0 || any(text, R.TXT_PAY);
     if (pay) return handleWall(scope, cmp, b, 'pay');
-    if (b.reject.length || b.settings.length) return; // jest wybór, ale nie zadziałał — nie akceptujemy na ślepo
+    if (b.reject.length || b.settings.length) { // jest wybór, ale nie zadziałał — nie akceptujemy na ślepo
+      offerReport(root, panel, cmp, 'reject-failed');
+      return;
+    }
     if (isBlocking(scope)) return handleWall(scope, cmp, b, 'cookiewall');
 
     // baner informacyjny (np. "Ta strona używa cookies. OK")
@@ -650,6 +762,11 @@
     if (busy || attempts >= MAX_ATTEMPTS || !settings) return;
     let banners;
     try { banners = findBanners(); } catch (e) { log('scan error', e); return; }
+    if (!banners.length && !reported && settings.reportUnsupported && Date.now() - startedAt > 5000 && unrecognizedChecks < 3) {
+      unrecognizedChecks++;
+      const el = findUnrecognized();
+      if (el) offerReport(el, null, null, 'unrecognized');
+    }
     for (const { root, cmp } of banners) {
       if (handledRoots.has(root)) continue;
       handledRoots.add(root);
@@ -667,6 +784,7 @@
   }
 
   function startObserving() {
+    startedAt = Date.now();
     scheduleScan(200);
     observer = new MutationObserver(() => scheduleScan(400));
     observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style', 'hidden', 'aria-hidden'] });
@@ -684,12 +802,25 @@
       UI.askWall(msg).then(sendResponse);
       return true;
     }
+    if (msg.type === 'report-prompt' && IS_TOP) {
+      UI.askReport(msg).then(decision => send({ type: 'report-answer', decision }));
+      return;
+    }
+    if (msg.type === 'collect-report') {
+      // ręczne zgłoszenie z popupu: odpowiada ramka, w której jest okienko; ramka główna zawsze (z opóźnieniem)
+      if (!settings) return;
+      const found = findBanners()[0];
+      const el = found ? found.root : findUnrecognized(3);
+      if (el) { sendResponse({ data: collectReport(el, null, found ? found.cmp : null, 'manual') }); return; }
+      if (IS_TOP) { setTimeout(() => sendResponse({ data: collectReport(null, null, null, 'manual') }), 500); return true; }
+      return;
+    }
     if (msg.type === 'toast' && IS_TOP) {
       UI.toast(msg.html);
       return;
     }
     if (msg.type === 'rescan') {
-      attempts = 0; wallAsked = false;
+      attempts = 0; wallAsked = false; reported = false; unrecognizedChecks = 0;
       init();
       sendResponse && sendResponse({ ok: true });
     }

@@ -23,6 +23,14 @@
     .brand { margin-top: 12px; font-size: 11px; color: #9ca3af; text-align: right; }
     .toast { position: fixed; right: 16px; bottom: 16px; max-width: min(380px, calc(100vw - 32px)); background: #1d2330; color: #f3f4f6; border-radius: 10px; padding: 10px 14px; font-size: 13px; line-height: 1.4; box-shadow: 0 8px 30px rgba(0,0,0,.3); z-index: 2147483647; pointer-events: none; opacity: 0; transform: translateY(8px); transition: opacity .25s, transform .25s; }
     .toast.show { opacity: 1; transform: none; }
+    .report { position: fixed; right: 16px; bottom: 16px; width: min(360px, calc(100vw - 32px)); background: #fff; color: #1d2330; border-radius: 14px; box-shadow: 0 12px 40px rgba(0,0,0,.3); padding: 16px 18px 16px; z-index: 2147483647; }
+    .report h2 { font-size: 15px; }
+    .report p { font-size: 13px; }
+    .report details { margin-top: 8px; font-size: 12px; color: #6b7280; }
+    .report summary { cursor: pointer; }
+    .report ul { margin: 6px 0 0; padding-left: 18px; }
+    .report .btns { margin-top: 12px; }
+    .report button { flex: 1 1 0; padding: 10px 12px; }
     .toast b { color: #fbbf24; font-weight: 600; }
     @media (prefers-color-scheme: dark) {
       .card { background: #1d2330; color: #f3f4f6; }
@@ -31,6 +39,8 @@
       .no { background: #2d3443; color: #f3f4f6; }
       .no:hover { background: #374051; }
       .ico { background: #3a2e1a; }
+      .report { background: #1d2330; color: #f3f4f6; }
+      .report details { color: #9ca3af; }
     }
   `;
 
@@ -87,6 +97,33 @@
     });
   }
 
+  /** Propozycja zgłoszenia nieobsłużonego okienka (nie blokuje strony). Zwraca Promise<'send'|'no'>. */
+  function askReport({ host }) {
+    return new Promise(resolve => {
+      const { host: el, root } = makeHost('ccr-report');
+      const card = document.createElement('div');
+      card.className = 'report';
+      card.setAttribute('role', 'dialog');
+      card.setAttribute('aria-labelledby', 't');
+      card.innerHTML = `
+        <div class="head"><div class="ico">🍪</div><div><h2 id="t">Nie umiem obsłużyć tego okienka cookie</h2><div class="host">${esc(host || location.hostname)}</div></div></div>
+        <p>Zgłoś je anonimowo — trafi na listę przypadków do obsłużenia w kolejnej wersji wtyczki.</p>
+        <details><summary>Co zostanie wysłane?</summary><ul>
+          <li>adres strony bez parametrów (bez części po „?” i „#”),</li>
+          <li>tekst okienka, jego przyciski i przełączniki oraz skrót jego struktury,</li>
+          <li>wersja wtyczki i przeglądarki.</li></ul>
+          Nic więcej — bez cookies, historii i danych z formularzy. Zgłoszenie stanie się publiczne na GitHubie.</details>
+        <div class="btns">
+          <button class="no" id="no">Nie</button>
+          <button class="yes" id="yes">Zgłoś</button>
+        </div>`;
+      root.appendChild(card);
+      const done = d => { el.remove(); resolve(d); };
+      root.getElementById('yes').addEventListener('click', () => done('send'));
+      root.getElementById('no').addEventListener('click', () => done('no'));
+    });
+  }
+
   let toastTimer = null;
   function toast(html, ms = 3800) {
     const { host, root } = makeHost('ccr-toast');
@@ -99,5 +136,5 @@
     toastTimer = setTimeout(() => { t.classList.remove('show'); setTimeout(() => host.remove(), 300); }, ms);
   }
 
-  g.CCR_UI = { askWall, toast, esc };
+  g.CCR_UI = { askWall, askReport, toast, esc };
 })(globalThis);

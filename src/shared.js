@@ -48,6 +48,8 @@
     // Banery z samym "OK/Akceptuj" (nieblokujące): 'hide' = ukryj, 'accept' = kliknij, 'ignore' = zostaw
     infoBanner: 'hide',
     notifications: true,
+    // Gdy wtyczka wykryje okienko cookie, którego nie umie obsłużyć — zaproponuj zgłoszenie (nic nie jest wysyłane bez kliknięcia).
+    reportUnsupported: true,
     disabledSites: [],
     debug: false
   };
@@ -93,5 +95,19 @@
     });
   }
 
-  g.CCR = { api, CATEGORY_DEFS, OPTIONAL_KEYS, DEFAULT_SETTINGS, mergeSettings, loadSettings, saveSettings, hostOf, hostMatches };
+  // Serwer zgłoszeń nieobsługiwanych okienek (kod: server/ w repozytorium).
+  const REPORT_URL = 'https://ted160-30160.mikrus.cloud/v1/report';
+
+  // Domena „rejestrowalna” (www.sklep.example.com.pl → example.com.pl) — ta sama reguła co na serwerze.
+  const MULTI_TLD = new Set(('co.uk org.uk ac.uk gov.uk me.uk com.pl net.pl org.pl edu.pl gov.pl info.pl biz.pl waw.pl ' +
+    'com.au net.au org.au co.jp ne.jp co.nz com.br com.tr co.in co.za com.mx com.ar com.cn com.ua co.kr co.il ' +
+    'com.sg com.hk com.tw co.at or.at com.es com.pt com.gr com.ro co.id com.my com.ph com.vn').split(' '));
+  function baseDomain(host) {
+    const h = String(host || '').toLowerCase().replace(/\.$/, '').replace(/^www\d*\./, '');
+    const p = h.split('.');
+    if (p.length <= 2) return h;
+    return MULTI_TLD.has(p.slice(-2).join('.')) ? p.slice(-3).join('.') : p.slice(-2).join('.');
+  }
+
+  g.CCR = { api, CATEGORY_DEFS, OPTIONAL_KEYS, DEFAULT_SETTINGS, REPORT_URL, mergeSettings, loadSettings, saveSettings, hostOf, hostMatches, baseDomain };
 })(globalThis);

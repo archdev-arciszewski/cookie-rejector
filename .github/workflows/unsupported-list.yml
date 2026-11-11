@@ -1,0 +1,70 @@
+# Odświeża UNSUPPORTED.md na gałęziach zgłoszeń (report/*), żeby PR-y ze zgłoszeniami nie miały konfliktów:
+#  - przy otwarciu / aktualizacji PR ze zgłoszeniem,
+#  - po każdym pushu do main (np. po merge'u innego zgłoszenia) — dla wszystkich otwartych PR-ów ze zgłoszeniami.
+name: Lista nieobsługiwanych okienek
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: unsupported-list
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || (startsWith(github.head_ref, 'report/') && github.event.pull_request.head.repo.full_name == github.repository)
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Odśwież listę na gałęziach zgłoszeń
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -n "${HEAD_REF:-}" ]; then
+            branches="$HEAD_REF"
+          else
+            branches=$(gh pr list --state open --limit 200 --json headRefName,isCrossRepository \
+              --jq '.[] | select(.isCrossRepository | not) | .headRefName | select(startswith("report/"))')
+          fi
+          for b in $branches; do
+            echo "::group::$b"
+            git checkout -B "$b" "origin/$b"
+            # dociągnij main; konflikt może być tylko w UNSUPPORTED.md, który i tak generujemy od nowa
+            if ! git merge --no-edit origin/main; then
+              git checkout --theirs UNSUPPORTED.md 2>/dev/null || true
+              git add -A
+              git -c core.editor=true merge --continue
+            fi
+            python3 tools/unsupported_list.py
+            git add UNSUPPORTED.md
+            if ! git diff --cached --quiet; then git commit -m "Odśwież UNSUPPORTED.md"; fi
+            git push origin "HEAD:$b"
+            echo "::endgroup::"
+          done
+
+  # inne PR-y (np. poprawka usuwająca plik przypadku) muszą mieć aktualną listę
+  check:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'report/')
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: UNSUPPORTED.md aktualny
+        run: |
+          python3 tools/unsupported_list.py --check || { echo "::error::Uruchom: python tools/unsupported_list.py i dodaj UNSUPPORTED.md do commita"; exit 1; }

@@ -148,7 +148,14 @@ async function runChromium(profile) {
       await c.send('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 });
     }
   };
-  return { run, probe, clickAt, loaded: !!sw, close: () => { try { ws.close(); } catch {} proc.kill(); } };
+  // sam proc.kill() zabija tylko proces startowy — procesy potomne trzymałyby port dla kolejnej przeglądarki
+  const close = async () => {
+    try { await Promise.race([c.send('Browser.close'), sleep(3000)]); } catch {}
+    try { ws.close(); } catch {}
+    proc.kill();
+    for (let i = 0; i < 20 && await fetch(`http://127.0.0.1:${port}/json/version`).then(() => true, () => false); i++) await sleep(500);
+  };
+  return { run, probe, clickAt, loaded: !!sw, close };
 }
 
 const profile = mkdtempSync(join(tmpdir(), 'ccr-e2e-'));
@@ -227,7 +234,7 @@ try {
   failed++;
   console.error('BŁĄD:', e.message);
 } finally {
-  browser && browser.close();
+  if (browser) await browser.close();
   reportSrv.kill();
   await sleep(1500);
   if (failed) console.log('\nlog serwera zgłoszeń:\n' + srvLog);

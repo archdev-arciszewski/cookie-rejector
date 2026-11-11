@@ -18,7 +18,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const [, , kind, exe] = process.argv;
 const BASE = process.env.CCR_BASE || 'http://localhost:8765/cookie-rejector/test/index.html';
 // zgłoszenia wymagają prawdziwej domeny (serwer odrzuca localhost) — mapujemy ją na 127.0.0.1 w przeglądarce
-const REPORT_HOSTS = ['ccr-e2e.example.com', 'ccr-e2e.example.org'];
+const REPORT_HOSTS = ['ccr-e2e.example.com', 'ccr-e2e.example.org', 'ccr-e2e.example.net', 'ccr-e2e.example.edu'];
 const onHost = (h, url) => url.replace('//localhost', '//' + h);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -37,6 +37,7 @@ const PROBE = `JSON.stringify({
   vw: innerWidth, vh: innerHeight,
   report: !!document.getElementById('ccr-report'),
   rejectTried: window.__rejectTried || 0,
+  toggleClicks: window.__toggleClicks || 0,
   clicked: window.__clicked || null,
   wpSaved: window.__wpSaved || null,
   prompt: !!document.getElementById('ccr-wall-prompt'),
@@ -104,6 +105,10 @@ async function runFirefox(profile) {
 async function runChromium(profile) {
   const port = 9334;
   const extPath = join(ROOT, 'dist', 'test-chromium');
+  // pozostałość po poprzednim przebiegu na tym porcie dałaby wyniki innej przeglądarki
+  if (await fetch(`http://127.0.0.1:${port}/json/version`).then(() => true, () => false)) {
+    throw new Error(`port ${port} jest zajęty przez inną przeglądarkę — zamknij ją i uruchom test ponownie`);
+  }
   const proc = spawn(exe, [
     '--headless=new', `--user-data-dir=${profile}`, `--remote-debugging-port=${port}`, '--no-first-run', '--no-default-browser-check',
     `--load-extension=${extPath}`, `--disable-extensions-except=${extPath}`,
@@ -195,6 +200,23 @@ try {
     await sleep(2500);
     const after = await browser.probe();
     check('stuck-decline', !after.report && !after.clicked && !existsSync(pendingFile('example.org')), after);
+  }
+
+  // --- obsługa trwa za długo → przerwanie (bez dalszych kliknięć) i propozycja zgłoszenia ---
+  {
+    await browser.run(onHost(REPORT_HOSTS[2], `${BASE}?ext=1&case=slow`), 0);
+    const r = await until(x => x.report, 45000);
+    await sleep(3000);
+    const later = await browser.probe();
+    check('slow-offer', r.report && !r.clicked && r.waited < 32000 && r.toggleClicks < 600 && later.toggleClicks === r.toggleClicks,
+      { waited: r.waited, toggleClicks: r.toggleClicks, later: later.toggleClicks, clicked: r.clicked });
+  }
+
+  // --- „Odrzuć” pozornie działa, okienko wraca → propozycja zgłoszenia ---
+  {
+    await browser.run(onHost(REPORT_HOSTS[3], `${BASE}?ext=1&case=reappear`), 0);
+    const r = await until(x => x.report, 20000);
+    check('reappear', r.report && !r.clicked && r.rejectTried === 1, { waited: r.waited, rejectTried: r.rejectTried, clicked: r.clicked });
   }
 } catch (e) {
   failed++;

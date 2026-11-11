@@ -13,11 +13,13 @@
 
   const SCAN_WINDOW_MS = 60000;   // jak długo obserwujemy DOM po załadowaniu
   const MAX_ATTEMPTS = 5;         // maks. liczba obsłużonych banerów na ramkę
+  const HANDLE_TIMEOUT_MS = 20000; // dłuższa obsługa jest przerywana, a okienko zgłaszane
 
   let settings = null;
   let topHost = '';
   let attempts = 0;
   let busy = false;
+  let aborted = false;            // obsługa przerwana po przekroczeniu czasu — nic więcej nie klikamy
   let wallAsked = false;
   let reported = false;
   let unrecognizedChecks = 0;
@@ -27,6 +29,7 @@
   const handledRoots = new WeakSet();
 
   const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const checkAbort = () => { if (aborted) throw new Error('obsługa przerwana (limit czasu)'); };
   const log = (...a) => { if (settings && settings.debug) console.debug('[CookieRejector]', location.hostname, ...a); };
 
   // ======================================================================
@@ -201,6 +204,7 @@
   }
 
   async function click(el) {
+    checkAbort();
     try { el.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch (e) { /* ignore */ }
     log('click', labelOf(el), el);
     try {
@@ -216,6 +220,7 @@
   async function waitGone(els, ms = 2500) {
     const t0 = Date.now();
     while (Date.now() - t0 < ms) {
+      checkAbort();
       if (els.filter(Boolean).every(e => !isShown(e))) return true;
       await sleep(150);
     }
@@ -225,6 +230,7 @@
   async function waitFor(fn, ms = 4000, step = 200) {
     const t0 = Date.now();
     while (Date.now() - t0 < ms) {
+      checkAbort();
       const v = fn();
       if (v) return v;
       await sleep(step);
@@ -326,6 +332,7 @@
   }
 
   async function setToggle(el, want) {
+    checkAbort();
     if (toggleState(el) === want) return false;
     el.click();
     await sleep(40);
@@ -348,6 +355,7 @@
     const toggles = getToggles(panel);
     const res = { found: 0, changed: 0, cats: {} };
     for (const t of toggles) {
+      checkAbort();
       if (toggleDisabled(t)) continue;
       const cat = toggleCategory(t);
       if (cat === 'skip') continue;
@@ -733,7 +741,7 @@
       if (await tryReject(root, cmp, panel)) return;
     } else if (b.reject.length || b.settings.length) {
       log('fallback=none — zostawiam baner');
-      return;
+      return 'left';
     }
 
     // 4) brak opcji odrzucenia → ściana cookies / „zgoda albo płać” / baner informacyjny
@@ -742,16 +750,16 @@
     if (!b.accept.length) {
       log('brak przycisków do obsłużenia');
       offerReport(root, panel, cmp, (b.reject.length || b.settings.length) ? 'reject-failed' : 'no-accept');
-      return;
+      return 'offered';
     }
     const text = norm(deepText(scope));
     const pay = b.pay.length > 0 || any(text, R.TXT_PAY);
-    if (pay) return handleWall(scope, cmp, b, 'pay');
+    if (pay) { await handleWall(scope, cmp, b, 'pay'); return 'left'; }
     if (b.reject.length || b.settings.length) { // jest wybór, ale nie zadziałał — nie akceptujemy na ślepo
       offerReport(root, panel, cmp, 'reject-failed');
-      return;
+      return 'offered';
     }
-    if (isBlocking(scope)) return handleWall(scope, cmp, b, 'cookiewall');
+    if (isBlocking(scope)) { await handleWall(scope, cmp, b, 'cookiewall'); return 'left'; }
 
     // baner informacyjny (np. "Ta strona używa cookies. OK")
     if (settings.infoBanner === 'hide') { hideBanner(scope); report('hidden', cmp); }
@@ -770,12 +778,32 @@
     for (const { root, cmp } of banners) {
       if (handledRoots.has(root)) continue;
       handledRoots.add(root);
-      busy = true; attempts++;
-      try { await handle(root, cmp); } catch (e) { log('handle error', e); }
-      finally { busy = false; }
+      busy = true; attempts++; aborted = false;
+      let result;
+      try { result = await runHandle(root, cmp); } finally { busy = false; }
+      if (result !== 'left' && result !== 'offered') checkStillShown(root, cmp, result);
       scheduleScan(800);
       break;
     }
+  }
+
+  /** handle() z limitem czasu: po jego przekroczeniu przerywa obsługę (kolejne kliknięcia rzucają wyjątek). */
+  async function runHandle(root, cmp) {
+    let timer;
+    const timeout = new Promise(r => { timer = setTimeout(() => r('timeout'), HANDLE_TIMEOUT_MS); });
+    const run = handle(root, cmp).catch(e => { log('handle error', e); return 'error'; });
+    const result = await Promise.race([run, timeout]);
+    clearTimeout(timer);
+    if (result === 'timeout') { aborted = true; log('obsługa trwa zbyt długo — przerywam'); }
+    return result;
+  }
+
+  /** Po obsłudze (także po błędzie lub przerwaniu) okienko nadal jest na ekranie → propozycja zgłoszenia. */
+  async function checkStillShown(root, cmp, result) {
+    await sleep(1500);
+    if (!root.isConnected || !isShown(root)) return;
+    log('okienko nadal widoczne po obsłudze', result);
+    offerReport(root, null, cmp, 'reject-failed');
   }
 
   function scheduleScan(ms = 300) {

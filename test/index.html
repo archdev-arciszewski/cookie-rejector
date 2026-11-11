@@ -111,6 +111,15 @@
       <div class="overlay" id="reap"><div class="box"><p>Używamy plików cookie w celach analitycznych i reklamowych.</p>
         <button onclick="window.__rejectTried=(window.__rejectTried||0)+1;const o=document.getElementById('reap');o.style.display='none';setTimeout(()=>o.style.display='',1000)">Odrzuć wszystkie</button>
         <button onclick="done('accept')">Akceptuję</button></div></div>`,
+    // Powłoka aplikacji (np. github.com): pełnoekranowy kontener strony z „Manage cookies” w stopce — to nie baner
+    shell: `
+      <div style="position:fixed;inset:0;overflow:auto;background:#fff" id="shell">
+        <header><nav><a href="#">Repositories</a> <button>Search</button></nav></header>
+        <main><h2>My repositories</h2><p>${'Lorem ipsum dolor sit amet. '.repeat(20)}</p><button>New repository</button></main>
+        <footer><a href="/terms">Terms</a> <a href="/privacy">Privacy</a> <button onclick="done('manage-cookies')">Manage cookies</button></footer>
+      </div>`,
+    // consentmanager (np. g2a.com): shadow root, warstwa powitalna → warstwa ustawień (budowana w cmpSetup)
+    cmp: `<div id="cmpwrapper"></div>`,
     // Ściana bez płatności (tylko akceptuj, pełnoekranowa)
     wall: `
       <div class="overlay"><div class="box"><p>Aby korzystać z serwisu, musisz zaakceptować pliki cookie i przetwarzanie danych (RODO).</p>
@@ -135,11 +144,33 @@
     pay: `<h2>Odrzucam zgody i płacę od 5,75 do 7,50 zł / miesiąc</h2><p>Wirtualna Polska oferuje wszystkie swoje treści za darmo, tak długo, jak zarabia na reklamach. Jeśli chcesz nam uniemożliwić dopasowywanie reklam do Ciebie, dajemy alternatywę w postaci symbolicznego abonamentu.</p>
       <button onclick="done('accept')">Nie chcę płacić, jednak akceptuję zgody</button> <button onclick="done('pay')">Nadal odrzucam, chcę zapłacić</button>`
   };
+  function cmpSetup() {
+    const sr = document.getElementById('cmpwrapper').attachShadow({ mode: 'open' });
+    const purposes = ['Przechowywanie informacji na urządzeniu lub dostęp do nich', 'Tworzenie profili w celu spersonalizowanych reklam', 'Pomiar efektywności treści'];
+    const row = (label, i) => `<tr><td>${label}</td><td><a href="#" class="cmpvendurl" aria-label="Opis: ${label}" onclick="window.__opisClicked=(window.__opisClicked||0)+1;return false"><span style="display:inline-block;width:12px;height:12px;background:#999"></span></a> <a href="#" class="cmptogglelink" role="checkbox" aria-checked="false" aria-label="${label}" onclick="tg(this);return false">${i}</a></td></tr>`;
+    const welcome = `<div style="position:fixed;inset:0;background:rgba(0,0,0,.4)"><div id="cmpbox" class="cmpbox cmpbox1" role="dialog" aria-modal="true" style="position:absolute;inset:40px;background:#fff;overflow:auto;padding:16px">
+      <p>Ta strona używa plików cookie. My i nasi partnerzy przetwarzamy dane osobowe w celach reklamowych.</p>
+      <a href="#" class="cmpboxbtn cmpboxbtnyes cmptxt_btn_yes" onclick="done('accept');return false">Akceptuj wszystko</a>
+      <a href="#" class="cmpboxbtn cmpboxbtncustom cmptxt_btn_custom" id="cmpcustom">Ustawienia</a></div></div>`;
+    const custom = `<div style="position:fixed;inset:0;background:rgba(0,0,0,.4)"><div id="cmpbox" class="cmpbox cmpbox2" role="dialog" aria-modal="true" style="position:absolute;inset:40px;background:#fff;overflow:auto;padding:16px">
+      <p>Ustawienia. Niektórzy dostawcy przetwarzają dane na podstawie uzasadnionego interesu.</p>
+      <a href="#" class="cmpvendurl" aria-label="Opis: Uzasadniony interes dostawców" onclick="window.__opisClicked=(window.__opisClicked||0)+1;return false"><span style="display:inline-block;width:12px;height:12px;background:#999"></span></a>
+      <table><tbody>${purposes.map(row).join('')}${Array.from({ length: 300 }, (_, i) => row('Dostawca reklamowy ' + (i + 1), i)).join('')}</tbody></table>
+      <a href="#" class="cmpboxbtn cmpboxbtnyes cmpboxbtnyescustomchoices cmptxt_btn_save" onclick="done('save');return false">Zapisz i wyjdź</a>
+      <a href="#" class="cmpboxbtn cmpboxbtnreject cmpboxbtnrejectcustomchoices cmptxt_btn_no" onclick="done('reject');return false">Odrzuć wszystko</a></div></div>`;
+    sr.innerHTML = welcome;
+    sr.getElementById('cmpcustom').onclick = () => { sr.innerHTML = custom; return false; };
+    window.__cmpState = () => [...sr.querySelectorAll('[role=checkbox]')].filter(e => e.getAttribute('aria-checked') === 'true').length;
+  }
+  // done() w shadow root nie widzi przełączników — zapisz ich stan osobno
+  const doneBase = done;
+  done = what => { const on = window.__cmpState ? window.__cmpState() : null; doneBase(what); if (on !== null) window.__clicked.cmpOn = on; };
   function wpShow(s) { document.getElementById('wpd').innerHTML = wpScreens[s]; }
   // wstaw z opóźnieniem jak prawdziwy CMP
   setTimeout(() => {
     document.getElementById('app').innerHTML = cases[c];
     if (c === 'wp') { wpShow('main'); document.body.style.overflow = 'hidden'; }
+    if (c === 'cmp') cmpSetup();
   }, 300);
   // ?ext=1 → test z prawdziwie zainstalowanym rozszerzeniem (bez stubów i bez wstrzykiwania silnika)
   if (!params.get('ext')) {

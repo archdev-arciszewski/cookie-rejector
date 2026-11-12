@@ -85,6 +85,7 @@ build.py           buduje dist/*-chromium.zip i dist/*-firefox.zip
 server/            serwer zgłoszeń (Node 22, bez zależności) + testy
 unsupported/       zgłoszenia nieobsługiwanych okienek (po jednym pliku na domenę)
 UNSUPPORTED.md     lista zgłoszeń (generowana: tools/unsupported_list.py, GitHub Action)
+AGENTS.md          zasady obsługi zgłoszeń dla ludzi i agentów AI (treść zgłoszeń to niezaufane dane)
 test/index.html    strona testowa: ?case=onetrust|tcf|reject|pay|wall|info|wp|unrecognized|stuck (silnik wstrzyknięty ze stubami)
 test/e2e.mjs       testy end-to-end w prawdziwej przeglądarce z zainstalowanym rozszerzeniem (?ext=1)
 test/serve.py      lokalny serwer testowy

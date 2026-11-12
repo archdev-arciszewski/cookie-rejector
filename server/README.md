@@ -37,8 +37,23 @@ Inne endpointy: `GET /health`, `GET /setup?token=…` i `GET /setup/callback` (j
 - Limity: 4 zgłoszenia / 10 min i 12 / dobę na IP (IPv6 liczone jako /64), maks. 3 równoległe zapytania na IP,
   jeden PR na domenę, 25 PR-ów dziennie, maks. 40 otwartych PR-ów ze zgłoszeniami, kolejka 20.
 - Treść ≤ 48 KB, nagłówki 5 s, całe zapytanie 10 s, blokada powtórzeń tej samej treści, domena musi istnieć w DNS.
-- Wszystkie pola są walidowane i przycinane; w Markdownie tekst ze strony trafia do bloków kodu (płot dłuższy niż
-  każdy ciąg backticków w treści), komórki tabel są escapowane.
+
+## Treść zgłoszeń (phishing, prompt injection)
+
+Zgłaszający może podać dowolną istniejącą domenę i dowolny tekst, np. stronę phishingową z treścią udającą polecenia
+dla asystenta AI, który potem obsługuje zgłoszenie. Dlatego:
+
+- Wszystkie pola są walidowane i przycinane. Ścieżka adresu zawiera tylko znaki dozwolone w URL (bez spacji i nowych
+  linii), a nagłówek YAML pliku zawsze ma wartości w jednej linii, więc nie da się dopisać pól ani wyjść poza nagłówek.
+- Tekst ze strony trafia do bloków kodu (płot dłuższy niż każdy ciąg backticków w treści). Komórki tabel są kodem
+  inline, więc GitHub nie tworzy w nich linków, wzmianek `@`, odwołań `#` ani HTML.
+- Dane ze zgłoszenia leżą między znacznikami z losowym identyfikatorem, którego zgłaszający nie zna. Plik i PR
+  zaczynają się ostrzeżeniem, że to dane, a nie polecenia, z odnośnikiem do zasad w [AGENTS.md](../AGENTS.md).
+- Treść wyglądająca na polecenia dla AI albo komendy powłoki oznacza zgłoszenie (`suspicious: tak`, ⚠️ w tytule PR,
+  ostrzeżenie w treści). Zgłoszenie nie jest odrzucane: taki filtr łatwo obejść, a o obsłudze decyduje człowiek.
+- `tools/unsupported_list.py` przenosi do `UNSUPPORTED.md` tylko pola o ściśle określonym formacie.
+- PR-y ze zgłoszeniami nie zmieniają kodu. Akcja GitHuba na gałęziach `report/*` tylko generuje listę z nagłówków
+  plików, a treści zgłoszenia nigdy nie wykonuje.
 
 Adresy IP są trzymane tylko w pamięci (na potrzeby limitów) i nie trafiają do logów ani na dysk.
 

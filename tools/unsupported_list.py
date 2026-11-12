@@ -32,6 +32,17 @@ def front_matter(text):
     return meta
 
 
+# Pliki zgłoszeń pochodzą od anonimowych użytkowników — do listy trafiają tylko pola o ściśle określonym formacie.
+DOMAIN_RE = re.compile(r"^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$")
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+CMP_RE = re.compile(r"^[\w .-]{1,40}$")
+
+
+def safe(meta, key, rx, default="—"):
+    v = meta.get(key, "")
+    return v if rx.match(v) else default
+
+
 def cell(s):
     s = re.sub(r"[\r\n|<>`\\*_\[\]]", " ", str(s or "")).strip()
     return s or "—"
@@ -42,9 +53,10 @@ def build():
     for f in sorted(DIR.glob("*.md")):
         if f.name.lower() == "readme.md":
             continue
+        if not DOMAIN_RE.match(f.stem):
+            continue
         meta = front_matter(f.read_text(encoding="utf-8"))
-        domain = meta.get("domain") or f.stem
-        rows.append((domain, meta, f.name))
+        rows.append((f.stem, meta, f.name))
     rows.sort(key=lambda r: r[0])
 
     lines = [
@@ -67,10 +79,10 @@ def build():
             "|---|---|---|---|---|",
         ]
         for domain, meta, name in rows:
-            reason = REASONS.get(meta.get("reason", ""), meta.get("reason", ""))
-            cmp = meta.get("cmp", "-")
+            reason = REASONS.get(meta.get("reason", ""), "—")
+            cmp = safe(meta, "cmp", CMP_RE)
             lines.append(
-                f"| {cell(domain)} | {cell(meta.get('reported'))} | {cell('—' if cmp == '-' else cmp)} "
+                f"| {cell(domain)} | {cell(safe(meta, 'reported', DATE_RE))} | {cell('—' if cmp == '-' else cmp)} "
                 f"| {cell(reason)} | [{name}](unsupported/{name}) |"
             )
     return "\n".join(lines) + "\n"

@@ -42,6 +42,9 @@ const PROBE = `JSON.stringify({
   toggleClicks: window.__toggleClicks || 0,
   opisClicked: window.__opisClicked || 0,
   clicked: window.__clicked || null,
+  clickHidden: window.__clickHidden || [],
+  clickScroll: window.__clickScroll || [],
+  inlineOverflow: document.documentElement.style.overflow + '|' + document.body.style.overflow,
   wpSaved: window.__wpSaved || null,
   prompt: !!document.getElementById('ccr-wall-prompt'),
   toast: !!document.getElementById('ccr-toast'),
@@ -185,6 +188,11 @@ try {
     const ok = check(r);
     if (!ok) failed++;
     console.log(`${ok ? 'OK  ' : 'FAIL'} ${name.padEnd(12)} ${JSON.stringify(r)}`);
+    // obsługa „w tle”: każde kliknięcie wtyczki trafia w okienko ukryte przed użytkownikiem
+    if (r.clicked && !(r.clickHidden.length && r.clickHidden.every(Boolean))) { failed++; console.log('FAIL         ^ okienko było widoczne podczas klikania'); }
+    // ukryte okienko nie blokuje przewijania, a po obsłudze nie zostaje nasze nadpisanie stylu
+    if (r.clicked && !r.clickScroll.every(Boolean)) { failed++; console.log('FAIL         ^ przewijanie zablokowane podczas obsługi'); }
+    if (r.clicked && r.inlineOverflow !== '|') { failed++; console.log('FAIL         ^ pozostał styl overflow: ' + r.inlineOverflow); }
     if (r.report) { failed++; console.log('FAIL         ^ niepotrzebna propozycja zgłoszenia'); }
   }
 

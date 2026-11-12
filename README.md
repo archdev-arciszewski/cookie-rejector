@@ -32,6 +32,8 @@ Pobierz paczkę z zakładki **Releases** albo zbuduj ją sam: `python build.py` 
 
 Dla każdego wykrytego banera (także w iframe'ach i Shadow DOM):
 
+**Obsługa w tle** — okienko jest niewidoczne od chwili pojawienia się na stronie (znane CMP jeszcze przed pierwszym odmalowaniem), a przewijanie strony działa, dopóki wtyczka klika. Jeśli obsługa się nie uda albo potrzebna jest Twoja decyzja (ściana „zgoda albo płać”, zgłoszenie), okienko wraca na ekran.
+
 1. **Znane CMP przez API** — Cookiebot (`submitCustomConsent`) i Usercentrics (v2/v3): zgody ustawiane bezpośrednio, per kategoria.
 2. **Ustawienia szczegółowe** — klika „Ustawienia / Dostosuj / Więcej opcji”, rozpoznaje każdy przełącznik po etykiecie i nagłówku wiersza (PL/EN/DE/FR/ES/IT/NL/CS), ustawia go zgodnie z Twoimi kategoriami, przechodzi do zakładek „Uzasadniony interes” i klika „Sprzeciw wobec wszystkich”, a na koniec „Zapisz”.
 3. **Plan B** — „Odrzuć wszystkie” (na banerze albo w panelu ustawień). Jeśli wszystkie kategorie opcjonalne masz wyłączone, wtyczka od razu klika „Odrzuć”.
@@ -60,6 +62,7 @@ Serwer (`server/`) działa jako GitHub App, która tylko otwiera PR-y z gałęzi
 | Funkcjonalne / preferencje | ✓ |
 | Analityczne, reklamowe, personalizacja, social media, partnerzy, uzasadniony interes, pozostałe | ✗ |
 | Ustawiaj kategorie szczegółowo | ✓ |
+| Obsługuj okienka w tle | ✓ |
 | Gdy się nie uda | Odrzuć wszystkie |
 | Ściany „zgoda albo płać” | Zapytaj mnie |
 | Po odmowie | Nic nie rób (opcjonalnie: zamknij kartę) |

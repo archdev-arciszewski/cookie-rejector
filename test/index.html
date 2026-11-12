@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <title>CCR test</title>
 <style>
+  .ccr-test-locked { overflow: hidden; }
   body { font-family: sans-serif; margin: 0; padding: 20px; }
   .fixed { position: fixed; left: 0; right: 0; bottom: 0; background: #eee; padding: 16px; border-top: 2px solid #999; }
   .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; }
@@ -22,6 +23,12 @@
   // ---- stub chrome API ----
   window.__reports = [];
   window.__walls = [];
+  // czy kliknięty element był ukryty (clip-path wtyczki na nim lub przodku, także przez Shadow DOM)
+  document.addEventListener('click', e => {
+    const path = e.composedPath().filter(n => n.nodeType === 1);
+    (window.__clickHidden ||= []).push(path.some(n => getComputedStyle(n).clipPath !== 'none'));
+    (window.__clickScroll ||= []).push([document.documentElement, document.body].every(n => getComputedStyle(n).overflowY !== 'hidden'));
+  }, true);
   const params = new URLSearchParams(location.search);
   const settings = JSON.parse(JSON.stringify({
     enabled: true, granular: true, fallback: 'reject', infoBanner: 'hide', notifications: true, debug: true, disabledSites: [],
@@ -97,14 +104,14 @@
       <div class="overlay" id="stuck"><div class="box"><p>Używamy plików cookie w celach analitycznych i reklamowych.</p>
         <button onclick="window.__rejectTried=(window.__rejectTried||0)+1">Odrzuć wszystkie</button>
         <button onclick="done('accept')">Akceptuję</button></div></div>`,
-    // Obsługa trwa za długo (np. g2a.com: setki przełączników partnerów, które nie reagują na kliknięcie)
+    // Obsługa trwa za długo (setki przełączników partnerów, a strona przetwarza każde kliknięcie ~40 ms)
     // → przerwanie po limicie czasu, bez dalszych kliknięć, i propozycja zgłoszenia
     slow: `
       <div class="overlay" id="slow"><div class="box" style="max-height:80vh;overflow:auto"><p>Używamy plików cookie w celach analitycznych i reklamowych. Wybierz partnerów.</p>
         <button onclick="document.getElementById('slowp').style.display='block'">Ustawienia</button>
         <button onclick="done('accept')">Akceptuję wszystkie</button>
         <div id="slowp" style="display:none"><button onclick="">Zapisz wybór</button>
-          ${Array.from({ length: 600 }, (_, i) => `<div>Partner reklamowy ${i + 1} <span role="switch" aria-checked="true" tabindex="0" onclick="window.__toggleClicks=(window.__toggleClicks||0)+1">wł.</span></div>`).join('')}
+          ${Array.from({ length: 600 }, (_, i) => `<div>Partner reklamowy ${i + 1} <span role="switch" aria-checked="true" tabindex="0" onclick="slowClick()">wł.</span></div>`).join('')}
         </div></div></div>`,
     // "Odrzuć" pozornie działa: okienko znika i po chwili wraca → propozycja zgłoszenia
     reappear: `
@@ -125,6 +132,10 @@
       <div class="overlay"><div class="box"><p>Aby korzystać z serwisu, musisz zaakceptować pliki cookie i przetwarzanie danych (RODO).</p>
         <button onclick="done('accept')">Akceptuję</button></div></div>`
   };
+  function slowClick() {
+    window.__toggleClicks = (window.__toggleClicks || 0) + 1;
+    for (const t = performance.now(); performance.now() - t < 40;); // strona przetwarza kliknięcie ~40 ms
+  }
   function tg(el) { el.setAttribute('aria-checked', el.getAttribute('aria-checked') === 'true' ? 'false' : 'true'); }
   function done(what) {
     const state = {};
@@ -132,6 +143,7 @@
     document.querySelectorAll('[role=switch]').forEach((s, i) => state['sw' + i] = s.getAttribute('aria-label') + ':' + s.getAttribute('aria-checked'));
     window.__clicked = { what, state };
     document.getElementById('app').innerHTML = '';
+    document.body.style.overflow = ''; document.documentElement.classList.remove('ccr-test-locked');
   }
   const c = params.get('case') || 'onetrust';
   const wpScreens = {
@@ -169,6 +181,9 @@
   // wstaw z opóźnieniem jak prawdziwy CMP
   setTimeout(() => {
     document.getElementById('app').innerHTML = cases[c];
+    // blokada przewijania jak w prawdziwych CMP: inline (reject) i przez klasę (tcf); done() ją zdejmuje
+    if (c === 'reject') document.body.style.overflow = 'hidden';
+    if (c === 'tcf') document.documentElement.classList.add('ccr-test-locked');
     if (c === 'wp') { wpShow('main'); document.body.style.overflow = 'hidden'; }
     if (c === 'cmp') cmpSetup();
   }, 300);

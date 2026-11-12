@@ -35,6 +35,8 @@
     },
     // Próbuj otworzyć ustawienia szczegółowe i ustawić przełączniki per kategoria.
     granular: true,
+    // Ukrywaj okienko na czas obsługi (klikanie „w tle”); gdy obsługa się nie uda, okienko wraca na ekran.
+    hideWhileHandling: true,
     // Gdy szczegółowe ustawienie się nie uda: 'reject' = kliknij "Odrzuć wszystkie", 'none' = nic nie rób.
     fallback: 'reject',
     wall: {

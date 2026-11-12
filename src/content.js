@@ -52,9 +52,17 @@
     return false;
   }
 
+  // Lista hostów Shadow DOM zapamiętana na czas jednego synchronicznego przebiegu (np. findBanners sprawdza
+  // ~25 reguł CMP — bez tego 25 razy przechodziłby cały dokument). Czyszczona w najbliższym mikrozadaniu.
+  let hostCache = null;
   function shadowHosts(root) {
-    const out = [];
-    for (const e of root.querySelectorAll('*')) if (e.shadowRoot) out.push(e);
+    if (!hostCache) { hostCache = new Map(); queueMicrotask(() => { hostCache = null; }); }
+    let out = hostCache.get(root);
+    if (!out) {
+      out = [];
+      for (const e of root.querySelectorAll('*')) if (e.shadowRoot) out.push(e);
+      hostCache.set(root, out);
+    }
     return out;
   }
 
@@ -72,10 +80,15 @@
     return t;
   }
 
+  const HAS_CHECK_VIS = typeof Element !== 'undefined' && typeof Element.prototype.checkVisibility === 'function';
   function isVisible(el) {
     if (!el || !el.isConnected) return false;
     const r = el.getBoundingClientRect();
     if (r.width < 2 || r.height < 2) return false;
+    // natywne sprawdzenie (display/visibility/opacity całego łańcucha przodków) — wielokrotnie szybsze niż ręczne
+    if (HAS_CHECK_VIS) {
+      return el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true, opacityProperty: true, visibilityProperty: true });
+    }
     let n = el, depth = 0;
     while (n && depth++ < 25) {
       const cs = getComputedStyle(n);
@@ -179,16 +192,24 @@
       if (navigatesAway(el)) continue;
       set.add(el);
     }
-    // jeśli przycisk zawiera inny przycisk — zostaw wewnętrzny
-    return [...set].filter(el => ![...set].some(o => o !== el && el.contains(o) && labelOf(o) === labelOf(el)));
+    // jeśli przycisk zawiera inny przycisk z tym samym tekstem — zostaw wewnętrzny
+    // (przodkowie zamiast porównań każdy z każdym: listy dostawców mają setki linków)
+    const labels = new Map();
+    const lab = el => { if (!labels.has(el)) labels.set(el, labelOf(el)); return labels.get(el); };
+    const drop = new Set();
+    for (const el of set) {
+      for (let p = parentOf(el), d = 0; p && d < 40; p = parentOf(p), d++) {
+        if (set.has(p) && !drop.has(p) && lab(p) === lab(el)) drop.add(p);
+      }
+    }
+    return [...set].filter(el => !drop.has(el));
   }
 
   function analyze(root, cmp) {
     const b = { reject: [], save: [], settings: [], accept: [], pay: [], close: [] };
     for (const el of actionables(root)) {
-      if (!isVisible(el)) continue;
       const c = classifyButton(labelOf(el));
-      if (c) b[c].push(el);
+      if (c && isVisible(el)) b[c].push(el); // widoczność tylko dla rozpoznanych (kosztowna przy setkach elementów)
     }
     if (cmp) {
       for (const k of ['reject', 'settings', 'save', 'accept']) {
@@ -214,7 +235,7 @@
       el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
     } catch (e) { /* ignore */ }
     el.click();
-    await sleep(350);
+    await sleep(100); // dalsze czekanie (waitFor/waitGone) odpytuje stan, więc tu wystarczy chwila
   }
 
   async function waitGone(els, ms = 2500) {
@@ -222,12 +243,12 @@
     while (Date.now() - t0 < ms) {
       checkAbort();
       if (els.filter(Boolean).every(e => !isShown(e))) return true;
-      await sleep(150);
+      await sleep(50);
     }
     return false;
   }
 
-  async function waitFor(fn, ms = 4000, step = 200) {
+  async function waitFor(fn, ms = 4000, step = 80) {
     const t0 = Date.now();
     while (Date.now() - t0 < ms) {
       checkAbort();
@@ -236,6 +257,108 @@
       await sleep(step);
     }
     return null;
+  }
+
+  // ======================================================================
+  // Obsługa „w tle”: okienko jest niewidoczne, dopóki go nie obsłużymy
+  // ======================================================================
+  // clip-path zamiast opacity/visibility/display: nie zmienia niczego, co sprawdzamy (rozmiar, widoczność,
+  // przezroczystość), nie tworzy bloku zawierającego dla potomków position:fixed (jak transform/filter)
+  // i wyłącza trafianie kursorem — użytkownik nie kliknie niewidocznego przycisku.
+  const concealed = new Map(); // element → [poprzednia wartość, priorytet] inline clip-path
+  let revealTimer = null;
+  const hideOn = () => !!(settings && settings.hideWhileHandling);
+
+  // okienka często blokują przewijanie (overflow: hidden na html/body) — gdy są ukryte, strona ma się przewijać
+  const unlocked = new Map(); // html/body → [poprzednia wartość, priorytet] inline overflow
+  function unlockScroll() {
+    if (!IS_TOP) return;
+    for (const el of [document.documentElement, document.body]) {
+      if (!el || unlocked.has(el) || getComputedStyle(el).overflowY !== 'hidden') continue;
+      unlocked.set(el, [el.style.getPropertyValue('overflow'), el.style.getPropertyPriority('overflow')]);
+      el.style.setProperty('overflow', 'auto', 'important');
+    }
+  }
+
+  function conceal(el) {
+    if (!hideOn() || !el || !el.style || concealed.has(el)) return;
+    if (el === document.documentElement || (el === document.body && IS_TOP) || (el.id && el.id.startsWith('ccr-'))) return;
+    concealed.set(el, [el.style.getPropertyValue('clip-path'), el.style.getPropertyPriority('clip-path')]);
+    el.style.setProperty('clip-path', 'inset(50%)', 'important');
+    unlockScroll();
+  }
+
+  function reveal() {
+    clearTimeout(revealTimer);
+    for (const [el, [v, p]] of concealed) {
+      if (v) el.style.setProperty('clip-path', v, p); else el.style.removeProperty('clip-path');
+    }
+    concealed.clear();
+    // Przywracamy dokładnie poprzednią wartość inline, o ile nadal jest nasza. Okienko, które przy zamknięciu
+    // zdejmuje blokadę przez style inline, nadpisało już naszą wartość (wtedy nic nie robimy); blokada z klasy
+    // znika razem z klasą, a wartość inline sprzed obsługi należała do strony.
+    for (const [el, [v, p]] of unlocked) {
+      if (el.style.getPropertyValue('overflow') !== 'auto' || el.style.getPropertyPriority('overflow') !== 'important') continue;
+      if (v) el.style.setProperty('overflow', v, p); else el.style.removeProperty('overflow');
+    }
+    unlocked.clear();
+  }
+
+  /** Pełnoekranowe przyciemnienia obok okienka (osobne elementy, bez tekstu). */
+  function backdropsOf(root) {
+    const out = [];
+    for (let n = root, d = 0; n && n !== document.body && d < 6; n = parentOf(n), d++) {
+      const p = parentOf(n);
+      if (!p || !p.children) break;
+      for (const s of p.children) {
+        if (s === n || (s.id && s.id.startsWith('ccr-')) || /^(SCRIPT|STYLE|LINK|META)$/.test(s.tagName)) continue;
+        if (getComputedStyle(s).position !== 'fixed') continue;
+        const r = s.getBoundingClientRect();
+        if (r.width >= innerWidth * 0.9 && r.height >= innerHeight * 0.9 && !(s.innerText || '').trim()) out.push(s);
+      }
+    }
+    return out;
+  }
+
+  function concealBanner(root) {
+    conceal(root);
+    try { backdropsOf(root).forEach(conceal); } catch (e) { /* ignore */ }
+  }
+
+  // Okienka znanych CMP ukrywamy już w chwili pojawienia się w DOM (przed pierwszym odmalowaniem),
+  // a podczas obsługi także nowe okna dialogowe (np. panel ustawień). Gdy obsługa nie ruszy — wracają na ekran.
+  let earlySel = null;
+  function earlySelector() {
+    if (earlySel !== null) return earlySel;
+    const ok = [];
+    for (const c of R.CMPS) for (const s of [c.detect, c.panel]) {
+      if (!s) continue;
+      try { document.querySelector(s); ok.push(s); } catch (e) { /* niepoprawny selektor */ }
+    }
+    return (earlySel = ok.join(', '));
+  }
+  const BUSY_SEL = '[role="dialog"], [role="alertdialog"], [aria-modal="true"], dialog';
+
+  function concealEarly(mutations) {
+    if (!hideOn() || attempts >= MAX_ATTEMPTS) return;
+    const sel = earlySelector();
+    if (!sel) return;
+    let hit = false;
+    const check = el => {
+      if (el.nodeType !== 1) return;
+      if (el.matches(sel) || (busy && el.matches(BUSY_SEL))) { conceal(el); hit = true; return; }
+      if (el.firstElementChild) for (const m of el.querySelectorAll(sel)) { conceal(m); hit = true; }
+    };
+    try {
+      for (const m of mutations) {
+        if (m.type === 'childList') m.addedNodes.forEach(check);
+        else if (m.type === 'attributes' && m.target.nodeType === 1 && m.target.matches(sel)) { conceal(m.target); hit = true; }
+      }
+    } catch (e) { /* ignore */ }
+    if (hit && !busy) {
+      clearTimeout(revealTimer);
+      revealTimer = setTimeout(() => { if (!busy) reveal(); }, 3000);
+    }
   }
 
   // ======================================================================
@@ -340,23 +463,41 @@
     return 'other';
   }
 
-  async function setToggle(el, want) {
-    checkAbort();
-    if (toggleState(el) === want) return false;
-    el.click();
-    await sleep(40);
-    if (toggleState(el) !== want) {
+  /**
+   * Ustawia przełączniki partiami: najpierw klika wszystkie bez czekania, potem jedna krótka pauza
+   * (frameworki aktualizujące stan asynchronicznie) i poprawki tylko tam, gdzie stan się nie zmienił:
+   * kliknięcie etykiety, a w ostateczności ustawienie `checked` i zdarzenia input/change.
+   * Wcześniej każdy przełącznik czekał 40 ms — przy setkach dostawców to kilka sekund.
+   */
+  async function setToggles(items) {
+    const wrong = () => items.filter(([el, want]) => el.isConnected && toggleState(el) !== want);
+    // co ~50 ms oddajemy sterowanie, żeby limit czasu obsługi (runHandle) mógł przerwać pętlę na wolnej stronie
+    let lastYield = performance.now();
+    const breathe = async () => {
+      if (performance.now() - lastYield > 50) { await sleep(0); lastYield = performance.now(); }
+      checkAbort();
+    };
+    let todo = wrong();
+    const changed = new Set(todo.map(([el]) => el));
+    for (const [el] of todo) { await breathe(); el.click(); }
+    if (todo.length) await sleep(60);
+    todo = wrong();
+    for (const [el] of todo) {
+      await breathe();
       const rn = el.getRootNode();
       const lab = (el.closest && el.closest('label')) || (el.id && rn.querySelector && rn.querySelector(`label[for="${CSS.escape(el.id)}"]`));
-      if (lab) { lab.click(); await sleep(40); }
+      if (lab) lab.click();
     }
-    if (toggleState(el) !== want && el.tagName === 'INPUT') {
+    if (todo.length) await sleep(60);
+    for (const [el, want] of wrong()) {
+      if (el.tagName !== 'INPUT') continue;
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked').set;
       setter.call(el, want);
       el.dispatchEvent(new Event('input', { bubbles: true }));
       el.dispatchEvent(new Event('change', { bubbles: true }));
     }
-    return toggleState(el) === want;
+    const still = new Set(wrong().map(([el]) => el));
+    return [...changed].filter(el => !still.has(el)).length;
   }
 
   /** Ustawia wszystkie przełączniki w panelu. Zwraca {found, changed, cats}. */
@@ -369,15 +510,13 @@
     try {
       plan = toggles.filter(t => !toggleDisabled(t)).map(t => [t, toggleCategory(t)]).filter(([, cat]) => cat !== 'skip');
     } finally { toggleCounts = null; }
-    for (const [t, cat] of plan) {
-      checkAbort();
+    const items = plan.map(([t, cat]) => {
       const want = cat === 'necessary' ? true : !!prefs[cat];
       res.found++;
       res.cats[cat] = want;
-      if (toggleState(t) !== want) {
-        if (await setToggle(t, want)) res.changed++;
-      }
-    }
+      return [t, want];
+    });
+    res.changed = await setToggles(items);
     log('toggles', res);
     return res;
   }
@@ -404,8 +543,9 @@
       const want = cat === 'necessary' ? true : !!prefs[cat];
       const target = want ? yes : no;
       const pressed = target.getAttribute('aria-pressed') === 'true' || target.getAttribute('aria-checked') === 'true';
-      if (!pressed) { target.click(); n++; await sleep(40); }
+      if (!pressed) { target.click(); n++; }
     }
+    if (n) await sleep(60);
     return n;
   }
 
@@ -420,7 +560,7 @@
     });
     for (const tab of tabs.slice(0, 2)) {
       await click(tab);
-      await sleep(400);
+      await sleep(200);
       const r = await applyToggles(panel, prefs);
       result.found += r.found; result.changed += r.changed;
     }
@@ -680,6 +820,7 @@
     } else if (b.settings.length) {
       await click(b.settings[0]);
       panel = await waitFor(() => findPanel(root, cmp), 4000);
+      if (panel) concealBanner(panel);
       if (!panel) {
         log('granular: brak panelu z przełącznikami');
         return { ok: false, opened: true };
@@ -687,7 +828,7 @@
     } else {
       return { ok: false };
     }
-    await sleep(300);
+    await sleep(150);
     const res = await applyToggles(panel, prefs);
     res.changed += await applyButtonPairs(panel, prefs);
     await handleLegitimateInterest(panel, prefs, res);
@@ -767,10 +908,13 @@
       if (await tryReject(root, cmp, panel)) return;
     } else if (b.reject.length || b.settings.length) {
       log('fallback=none — zostawiam baner');
+      reveal();
       return 'left';
     }
 
     // 4) brak opcji odrzucenia → ściana cookies / „zgoda albo płać” / baner informacyjny
+    //    tu decyduje użytkownik albo okienko zostaje — wraca na ekran (isBlocking też potrzebuje go widocznego)
+    reveal();
     const scope = (panel && isVisible(panel)) ? panel : root;
     b = analyze(scope, cmp);
     if (!b.accept.length) {
@@ -805,8 +949,9 @@
       if (handledRoots.has(root)) continue;
       handledRoots.add(root);
       busy = true; attempts++; aborted = false;
+      concealBanner(root);
       let result;
-      try { result = await runHandle(root, cmp); } finally { busy = false; }
+      try { result = await runHandle(root, cmp); } finally { busy = false; reveal(); }
       if (result !== 'left' && result !== 'offered') checkStillShown(root, cmp, result);
       scheduleScan(800);
       break;
@@ -832,15 +977,20 @@
     offerReport(root, null, cmp, 'reject-failed');
   }
 
+  // przepustnica, nie odkładanie: na stronach, które ciągle zmieniają DOM (reklamy), skan nie może czekać w nieskończoność
+  let scanDue = 0;
   function scheduleScan(ms = 300) {
+    const due = Date.now() + ms;
+    if (scanTimer && scanDue <= due) return;
     clearTimeout(scanTimer);
-    scanTimer = setTimeout(scan, ms);
+    scanDue = due;
+    scanTimer = setTimeout(() => { scanTimer = null; scan(); }, ms);
   }
 
   function startObserving() {
     startedAt = Date.now();
     scheduleScan(200);
-    observer = new MutationObserver(() => scheduleScan(400));
+    observer = new MutationObserver(muts => { concealEarly(muts); scheduleScan(250); });
     observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style', 'hidden', 'aria-hidden'] });
     setTimeout(() => { observer && observer.disconnect(); observer = null; }, SCAN_WINDOW_MS);
     // kilka dodatkowych skanów na wypadek wolno ładujących się CMP

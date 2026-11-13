@@ -215,8 +215,16 @@ async function onReportAnswer(tabId, decision) {
 
 async function manualReport(tabId, tabUrl) {
   if (tabId == null || !/^https?:/.test(tabUrl || '')) return { status: 'invalid-host', text: REPORT_TEXT['invalid-host'] };
-  const r = await api.tabs.sendMessage(tabId, { type: 'collect-report' }).catch(() => null);
-  if (!r || !r.data) return { status: 'no-content', text: 'Nie udało się odczytać strony — odśwież ją i spróbuj ponownie.' };
+  // najpierw ramka główna (tam zwykle jest okienko; odpowiedź ramki reklamowej nie może jej przesłonić),
+  // potem wszystkie ramki (okienko CMP w iframe)
+  let r = await api.tabs.sendMessage(tabId, { type: 'collect-report' }, { frameId: 0 }).catch(() => null);
+  if (!r || !r.data || (!r.data.text && r.data.page && r.data.page.top)) {
+    const any = await api.tabs.sendMessage(tabId, { type: 'collect-report', frames: true }).catch(() => null);
+    if (any && any.data && any.data.text) r = any;
+  }
+  if (!r || !r.data) {
+    return { status: 'no-content', text: 'Wtyczka nie działa na tej karcie — odśwież stronę (np. po instalacji lub aktualizacji wtyczki) i spróbuj ponownie.' };
+  }
   return deliver(tabId, CCR.baseDomain(CCR.hostOf(tabUrl)), withPage(r.data, tabUrl));
 }
 

@@ -42,6 +42,14 @@ Dla każdego wykrytego banera (także w iframe'ach i Shadow DOM):
 
 6. **Okienko, którego nie umie obsłużyć** — gdy wtyczka rozpoznaje okienko cookie, ale nie znajduje przycisków albo „Odrzuć” nie działa, **nie akceptuje niczego na ślepo**. Zamiast tego w prawym dolnym rogu pokazuje kartę z propozycją zgłoszenia (patrz niżej).
 
+**Okienka własne stron** (bez znanego CMP) wtyczka rozpoznaje „po rozumieniu”, a nie po nazwach klas:
+- szuka na stronie tekstu o cookies/prywatności i idzie w górę drzewa do najbliższego pływającego kontenera (fixed/sticky/dialog) — niezależnie od nazw klas (Tailwind, CSS-in-JS) i głębokości w DOM,
+- za przyciski uznaje też elementy, które tylko wyglądają na klikalne (kursor-łapka, krótki tekst), np. `div` z obsługą kliknięcia w JS,
+- rozpoznaje przełączniki rysowane samym CSS-em (tor + okrągła gałka, bez `input`/`role`) i odczytuje ich stan z położenia gałki,
+- panel ustawień otwarty jako osobne okno też jest obsługiwany (także gdy dopiero się pojawia z animacją),
+- czas, w którym strona sama blokuje przeglądarkę (np. renderuje ciężki panel), nie wlicza się do limitu obsługi.
+- **strony płatności nie są okienkami zgody**: na bramkach (Przelewy24, PayU, Tpay, Autopay, PayPal, Stripe, Adyen, Klarna…) i w oknach z kwotą do zapłaty, polami karty czy listą metod płatności wtyczka niczego nie wykrywa heurystycznie, nie ukrywa, nie klika i nie pyta o „zgodę albo płać”; „Google Pay”, „BLIK”, „Płatność kartą” to metody płatności, a nie „zapłać zamiast zgody”. Pytanie o ścianę pojawia się tylko, gdy okienko wprost mówi o cookies/śledzeniu.
+
 Reguły z selektorami dla: OneTrust, Cookiebot, Usercentrics, Didomi, Quantcast, Google Funding Choices, TrustArc, CookieYes, Complianz, Klaro, Osano, iubenda, consentmanager, Borlabs, Axeptio, CookieFirst, Cookie Script, Termly, Sourcepoint. Pozostałe są wykrywane heurystycznie (tekst + pozycja fixed/dialog + przyciski).
 
 ## Zgłaszanie nieobsługiwanych okienek

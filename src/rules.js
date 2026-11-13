@@ -50,6 +50,22 @@
     /nicht (zahlen|bezahlen)/, /ohne (zu )?(zahlen|bezahlen)/, /sans payer/, /sin pagar/, /senza pagare/, /zonder (te )?betalen/
   ];
 
+  // Nazwy metod płatności („Google Pay”, „PayPal”, „BLIK”…) — to nie jest „zapłać zamiast zgody”.
+  const PAY_METHOD = [
+    /(google|apple|samsung|amazon|garmin|revolut) ?pay/, /paypal/, /paypo/, /payu/, /blik/, /visa/, /mastercard/,
+    /maestro/, /american express/, /klarna/, /tpay/, /przelewy ?24/, /p24/, /autopay/, /paynow/, /dotpay/,
+    /przelew (online|tradycyjny|bankowy)/, /platnosc (karta|blik|przelewem|online|odroczon)/, /karta (platnicza|kredytowa|debetowa)/,
+    /click to pay/, /sofort/, /ideal/, /bancontact/, /twint/, /skrill/, /paysafecard/, /trustly/
+  ];
+
+  // Strona/okno płatności: kwota do zapłaty, dane karty, regulamin operatora płatności.
+  const TXT_CHECKOUT = [
+    /do zaplaty/, /kwota (do zaplaty|zamowienia|transakcji)/, /numer karty/, /data waznosci/, /cvv/, /cvc/, /kod blik/,
+    /wybierz (metode|sposob|forme) platnosci/, /metod[ay] platnosci/, /regulamin (przelewy24|payu|tpay|blik|autopay|paynow|dotpay)/,
+    /amount due/, /total due/, /order total/, /card number/, /expiry date/, /security code/, /payment method/, /choose (a )?payment/,
+    /zu zahlen/, /zahlungsart/, /kartennummer/, /montant a payer/, /moyen de paiement/, /importe a pagar/, /metodo de pago/
+  ];
+
   const BTN_ACCEPT = [
     /\bakceptuj/, /\bzaakceptuj/, /\bakceptuje/, /\bzgadzam/, /przejdz do (serwisu|strony)/, /przechodze do (serwisu|strony)/,
     /\brozumiem/, /\bprzyjmuj/, /\bwlacz(am)? wszystk/, /wyrazam zgode/, /\bdaj zgode/, /\bzezwol/, /\bjasne\b/,
@@ -160,7 +176,7 @@
   ];
 
   g.CCR_RULES = {
-    BTN_REJECT, BTN_SAVE, WORD_ALL, BTN_PAY, PAY_NEGATED, BTN_ACCEPT, BTN_SETTINGS, BTN_CLOSE, BTN_OBJECT_ALL,
+    BTN_REJECT, BTN_SAVE, WORD_ALL, BTN_PAY, PAY_NEGATED, PAY_METHOD, TXT_CHECKOUT, BTN_ACCEPT, BTN_SETTINGS, BTN_CLOSE, BTN_OBJECT_ALL,
     TXT_STRONG, TXT_WEAK, TXT_PAY, CAT, CAT_ORDER, TOGGLE_SKIP, CMPS
   };
 })(globalThis);

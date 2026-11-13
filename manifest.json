@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Cookie Rejector",
   "short_name": "CookieRej",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "author": "Paweł Arciszewski",
   "description": "Automatycznie odrzuca zgody cookie (zostawia tylko niezbędne i funkcjonalne). Przy ścianach 'zgoda albo płać' pyta o decyzję.",
   "permissions": ["storage", "tabs"],

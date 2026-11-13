@@ -23,6 +23,9 @@
   // ---- stub chrome API ----
   window.__reports = [];
   window.__walls = [];
+  // czy wtyczka kiedykolwiek ukryła jakiś element (clip-path w stylu inline)
+  new MutationObserver(ms => { for (const m of ms) if (m.target.style && m.target.style.clipPath) window.__clipEver = true; })
+    .observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ['style'] });
   // czy kliknięty element był ukryty (clip-path wtyczki na nim lub przodku, także przez Shadow DOM)
   document.addEventListener('click', e => {
     const path = e.composedPath().filter(n => n.nodeType === 1);
@@ -127,6 +130,49 @@
       </div>`,
     // consentmanager (np. g2a.com): shadow root, warstwa powitalna → warstwa ustawień (budowana w cmpSetup)
     cmp: `<div id="cmpwrapper"></div>`,
+    // Bramka płatności (jak Przelewy24): pełnoekranowe okno z kwotą i metodami płatności, wzmianka o cookies,
+    // „Akceptuję” i „Zapłać” — to NIE jest ściana „zgoda albo płać”: nic nie klikamy, nie ukrywamy, nie pytamy
+    gateway: `
+      <div style="position:fixed;inset:0;z-index:100;background:#556">
+        <div style="position:absolute;left:10%;right:10%;top:20px;background:#fff;padding:16px">
+          <p><b>Przelewy24</b> <span>14:30</span></p>
+          <p>DO ZAPŁATY <b>3128,00 PLN</b> — oponeo</p>
+          ${['Przelew online', 'BLIK', 'Visa Mobile', 'Płatność kartą', 'Google Pay', 'Apple Pay', 'PayPo']
+            .map(m => `<div style="cursor:pointer;border:1px solid #ddd;padding:6px;margin:4px 0" onclick="done('pay-method')">${m}</div>`).join('')}
+          <button onclick="done('accept')">Akceptuję</button> <button onclick="done('pay')">Zapłać</button>
+          <p style="font-size:11px">Płacąc akceptujesz Regulamin Przelewy24. Administratorem Twoich danych osobowych jest spółka PayPro S.A.
+            Serwis używa plików cookies niezbędnych do realizacji płatności. <a href="#">Czytaj całość</a></p>
+        </div>
+      </div>`,
+    // Panel ustawień jak na oponeo.pl: osobne pływające okno (bez roli dialog) wstawiane po chwili,
+    // przełączniki rysowane CSS-em (div-tor + okrągła gałka em), bez input/role/aria — stan tylko w wyglądzie
+    visual: `
+      <div id="visapp"><footer>
+        <div style="position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.4)">
+          <div style="position:fixed;bottom:0;left:0;right:0;background:#fff;padding:16px">
+            <p>Dbamy o Twoją prywatność! Korzystamy z plików cookies w celach analitycznych i marketingowych.</p>
+            <button onclick="done('accept')">Zgadzam się</button> <button onclick="done('reject')">Nie zgadzam się</button>
+            <button onclick="setTimeout(visOpen, 300)">Ustawienia</button>
+          </div>
+        </div>
+      </footer></div>`,
+    // Okienko własne strony (np. oponeo.pl, Next.js + Tailwind): głęboko w stopce, klasy bez znaczenia,
+    // pełnoekranowe przyciemnienie z panelem, „przyciski” to div-y z kursorem-łapką (bez roli i tabindex)
+    deep: `
+      <div class="flex min-h-screen"><main class="grow"><p>${'Opony zimowe w najlepszych cenach. '.repeat(15)}</p></main>
+        <footer class="mt-4 bg-gray-100"><div class="grid gap-2"><a href="/polityka">Polityka prywatności</a></div>
+          <div class="fixed left-0 top-0 z-[10000] h-full w-full bg-[rgba(0,0,0,0.4)]" style="position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.4)">
+            <div class="fixed bottom-0 grid w-full" style="position:fixed;bottom:0;left:0;right:0;background:#fff;padding:16px">
+              <p class="text-lg font-bold">Dbamy o Twoją prywatność!</p>
+              <p class="text-sm">Korzystamy z plików cookies i innych podobnych technologii. Wiąże się to z przetwarzaniem danych osobowych w celach analitycznych i marketingowych.</p>
+              <div class="flex gap-2">
+                <div class="rounded px-4 py-2" style="cursor:pointer" onclick="done('accept')">Zgadzam się</div>
+                <div class="rounded px-4 py-2" style="cursor:pointer" onclick="done('reject')"><span>Nie zgadzam się</span></div>
+              </div>
+            </div>
+          </div>
+        </footer>
+      </div>`,
     // Ściana bez płatności (tylko akceptuj, pełnoekranowa)
     wall: `
       <div class="overlay"><div class="box"><p>Aby korzystać z serwisu, musisz zaakceptować pliki cookie i przetwarzanie danych (RODO).</p>
@@ -156,6 +202,37 @@
     pay: `<h2>Odrzucam zgody i płacę od 5,75 do 7,50 zł / miesiąc</h2><p>Wirtualna Polska oferuje wszystkie swoje treści za darmo, tak długo, jak zarabia na reklamach. Jeśli chcesz nam uniemożliwić dopasowywanie reklam do Ciebie, dajemy alternatywę w postaci symbolicznego abonamentu.</p>
       <button onclick="done('accept')">Nie chcę płacić, jednak akceptuję zgody</button> <button onclick="done('pay')">Nadal odrzucam, chcę zapłacić</button>`
   };
+  function visRow(title, desc, on) {
+    return `<div style="display:grid;grid-template-columns:1fr 50px;gap:8px;padding:6px 0;border-bottom:1px solid #ddd">
+      <div><b>${title}</b><p style="margin:2px 0;font-size:12px">${desc}</p></div>
+      ${on === null ? '<span>Wymagane</span>' : `<div class="vt" data-on="${on ? 1 : 0}" onclick="visToggle(this)" style="cursor:pointer;width:40px;height:20px;border:1px solid #888;border-radius:10px;box-sizing:border-box;position:relative;background:${on ? '#2a6' : '#ccc'}">
+        <em style="display:block;width:16px;height:16px;border-radius:50%;background:#fff;position:absolute;top:1px;left:1px;transition:transform .2s;transform:translateX(${on ? 20 : 0}px)"></em></div>`}
+    </div>`;
+  }
+  function visToggle(t) {
+    const on = t.dataset.on !== '1';
+    t.dataset.on = on ? '1' : '0';
+    t.style.background = on ? '#2a6' : '#ccc';
+    t.firstElementChild.style.transform = `translateX(${on ? 20 : 0}px)`;
+  }
+  function visOpen() {
+    const w = document.createElement('div');
+    w.style.cssText = 'position:fixed;inset:0;z-index:9999;background:transparent';
+    w.innerHTML = `<div style="position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:420px;max-height:80vh;overflow:auto;background:#fff;padding:16px">
+      <h3>Ustawienia plików cookies</h3><p>Poniżej możesz sprawdzić, jakie dane zbieramy w ciasteczkach i po co.</p>
+      <div class="rows"></div>
+      <button onclick="window.__vis=[...document.querySelectorAll('.vt')].map(v=>v.dataset.on);done('save')">Zapisz ustawienia zgód</button>
+      <button onclick="done('accept-all')">Zgoda na wszystkie</button>
+      <button onclick="done('reject-all')">Odrzuć wszystkie</button></div>`;
+    document.getElementById('visapp').appendChild(w);
+    // zawartość panelu dochodzi chwilę po samym oknie
+    setTimeout(() => {
+      w.querySelector('.rows').innerHTML = visRow('Niezbędne', 'Są niezbędne, by strona działała prawidłowo.', null) +
+        visRow('Funkcjonalne', 'Zapamiętywanie Twoich preferencji i ustawień strony.', false) +
+        visRow('Poznanie zachowań użytkownika', 'Zgadzam się na przetwarzanie danych w celu prowadzenia analiz i statystyk.', true) +
+        visRow('Marketing', 'Zgadzam się na wyświetlanie spersonalizowanych reklam.', true);
+    }, 200);
+  }
   function cmpSetup() {
     const sr = document.getElementById('cmpwrapper').attachShadow({ mode: 'open' });
     const purposes = ['Przechowywanie informacji na urządzeniu lub dostęp do nich', 'Tworzenie profili w celu spersonalizowanych reklam', 'Pomiar efektywności treści'];

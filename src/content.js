@@ -28,8 +28,23 @@
   let scanTimer = null;
   const handledRoots = new WeakSet();
 
-  const sleep = ms => new Promise(r => setTimeout(r, ms));
-  const checkAbort = () => { if (aborted) throw new Error('obsługa przerwana (limit czasu)'); };
+  // Opóźnienie pauz ponad zadany czas to praca strony (zablokowany wątek, np. render ciężkiego panelu ustawień).
+  // Ten czas nie obciąża limitu obsługi — liczy się tylko oczekiwanie samej wtyczki.
+  let pageJankMs = 0;
+  const sleep = ms => new Promise(r => {
+    const t = performance.now();
+    setTimeout(() => { const over = performance.now() - t - ms; if (over > 100) pageJankMs += over; r(); }, ms);
+  });
+  // Limit czasu obsługi liczony bez czasu, w którym strona blokowała wątek (maks. +40 s). Sprawdzany przy każdym
+  // checkAbort — nie tylko przez timer, który w karcie w tle przeglądarka spowalnia do ~1 s.
+  let handleT0 = 0;
+  const overDeadline = () => handleT0 > 0 && performance.now() - handleT0 > HANDLE_TIMEOUT_MS + Math.min(pageJankMs, 40000);
+  const checkAbort = () => {
+    if (!aborted && overDeadline()) { aborted = true; log('obsługa trwa zbyt długo — przerywam'); }
+    if (aborted) throw new Error('obsługa przerwana (limit czasu)');
+  };
+  // oddanie sterowania stronie bez timera (MessageChannel nie jest spowalniany w kartach w tle)
+  const yieldNow = () => new Promise(r => { const ch = new MessageChannel(); ch.port1.onmessage = () => r(); ch.port2.postMessage(0); });
   const log = (...a) => { if (settings && settings.debug) console.debug('[CookieRejector]', location.hostname, ...a); };
 
   // ======================================================================
@@ -81,18 +96,22 @@
   }
 
   const HAS_CHECK_VIS = typeof Element !== 'undefined' && typeof Element.prototype.checkVisibility === 'function';
-  function isVisible(el) {
+  // jeden argument: isVisible bywa przekazywana wprost do filter/find/some (drugi argument to indeks)
+  const isVisible = el => visibleCheck(el, false);
+  /** anyOpacity: pomija przezroczystość (panel, który sami otworzyliśmy i który właśnie się pojawia z animacją). */
+  function visibleCheck(el, anyOpacity) {
     if (!el || !el.isConnected) return false;
     const r = el.getBoundingClientRect();
     if (r.width < 2 || r.height < 2) return false;
     // natywne sprawdzenie (display/visibility/opacity całego łańcucha przodków) — wielokrotnie szybsze niż ręczne
     if (HAS_CHECK_VIS) {
-      return el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true, opacityProperty: true, visibilityProperty: true });
+      return el.checkVisibility(anyOpacity ? { checkVisibilityCSS: true, visibilityProperty: true }
+        : { checkOpacity: true, checkVisibilityCSS: true, opacityProperty: true, visibilityProperty: true });
     }
     let n = el, depth = 0;
     while (n && depth++ < 25) {
       const cs = getComputedStyle(n);
-      if (cs.display === 'none' || cs.visibility === 'hidden' || parseFloat(cs.opacity) < 0.05) return false;
+      if (cs.display === 'none' || cs.visibility === 'hidden' || (!anyOpacity && parseFloat(cs.opacity) < 0.05)) return false;
       n = parentOf(n);
     }
     return true;
@@ -172,6 +191,7 @@
   function classifyButton(t) {
     if (!t || t.length > 90) return null;
     // płatność ma pierwszeństwo: "Nadal odrzucam, chcę zapłacić" to NIE jest zwykłe "Odrzuć"
+    if (any(t, R.PAY_METHOD)) return null; // „Google Pay”, „BLIK”, „Płatność kartą” — metoda płatności, nie przycisk zgody
     if (any(t, R.BTN_PAY) && !any(t, R.PAY_NEGATED)) return 'pay';
     if (any(t, R.BTN_REJECT)) return 'reject';
     const acc = any(t, R.BTN_ACCEPT);
@@ -192,6 +212,22 @@
       if (navigatesAway(el)) continue;
       set.add(el);
     }
+    // „Przyciski” bez znaczników (div/span z obsługą kliknięcia w JS, częste w React/Tailwind):
+    // kursor-łapka, krótki tekst, bez przełączników w środku. Kursor się dziedziczy — bierzemy element,
+    // którego rodzic nie ma łapki. Tylko w niedużych okienkach (getComputedStyle dla każdego elementu).
+    try {
+      const plain = root.querySelectorAll ? root.querySelectorAll('div, span, li, label, p') : [];
+      if (plain.length && plain.length < 1500) {
+        for (const el of plain) {
+          if (set.has(el) || getComputedStyle(el).cursor !== 'pointer') continue;
+          const p = el.parentElement;
+          if (p && getComputedStyle(p).cursor === 'pointer') continue;
+          if (el.querySelector(`${ACTION_SEL}, ${TOGGLE_SEL}`)) continue;
+          const t = (el.innerText || '').trim();
+          if (t && t.length <= 60) set.add(el);
+        }
+      }
+    } catch (e) { /* ignore */ }
     // jeśli przycisk zawiera inny przycisk z tym samym tekstem — zostaw wewnętrzny
     // (przodkowie zamiast porównań każdy z każdym: listy dostawców mają setki linków)
     const labels = new Map();
@@ -205,16 +241,17 @@
     return [...set].filter(el => !drop.has(el));
   }
 
-  function analyze(root, cmp) {
+  function analyze(root, cmp, anyOpacity = false) {
     const b = { reject: [], save: [], settings: [], accept: [], pay: [], close: [] };
+    const vis = el => visibleCheck(el, anyOpacity);
     for (const el of actionables(root)) {
       const c = classifyButton(labelOf(el));
-      if (c && isVisible(el)) b[c].push(el); // widoczność tylko dla rozpoznanych (kosztowna przy setkach elementów)
+      if (c && vis(el)) b[c].push(el); // widoczność tylko dla rozpoznanych (kosztowna przy setkach elementów)
     }
     if (cmp) {
       for (const k of ['reject', 'settings', 'save', 'accept']) {
         if (!cmp[k]) continue;
-        const known = deepQueryAll(document, cmp[k]).filter(isVisible);
+        const known = deepQueryAll(document, cmp[k]).filter(vis);
         if (known.length) {
           for (const kk of Object.keys(b)) b[kk] = b[kk].filter(e => !known.includes(e));
           b[k] = [...known, ...b[k]];
@@ -344,9 +381,14 @@
     const sel = earlySelector();
     if (!sel) return;
     let hit = false;
+    // podczas obsługi nowe pływające okna (np. panel ustawień bez roli dialog) też ukrywamy od razu
+    const floatingNew = el => {
+      try { return getComputedStyle(el).position === 'fixed' && !(el.id && el.id.startsWith('ccr-')); } catch (e) { return false; }
+    };
     const check = el => {
       if (el.nodeType !== 1) return;
-      if (el.matches(sel) || (busy && el.matches(BUSY_SEL))) { conceal(el); hit = true; return; }
+      if (el.matches(sel) || (busy && (el.matches(BUSY_SEL) || floatingNew(el)))) { conceal(el); hit = true; return; }
+      if (busy) for (const c of el.children) if (floatingNew(c)) { conceal(c); hit = true; }
       if (el.firstElementChild) for (const m of el.querySelectorAll(sel)) { conceal(m); hit = true; }
     };
     try {
@@ -364,10 +406,13 @@
   // ======================================================================
   // Przełączniki kategorii
   // ======================================================================
-  const TOGGLE_SEL = 'input[type="checkbox"], [role="switch"], [role="checkbox"]';
+  // [data-ccr-toggle] — przełączniki rozpoznane po wyglądzie (visualToggles), oznaczone przy pierwszym znalezieniu
+  const TOGGLE_SEL = 'input[type="checkbox"], [role="switch"], [role="checkbox"], [data-ccr-toggle]';
+  const VIS = 'data-ccr-toggle';
 
   function getToggles(root) {
-    const list = deepQueryAll(root, TOGGLE_SEL);
+    let list = deepQueryAll(root, TOGGLE_SEL);
+    if (!list.some(el => !el.hasAttribute(VIS))) list = list.concat(visualToggles(root).filter(el => !list.includes(el)));
     // usuń zagnieżdżone (np. input wewnątrz [role=switch]); przodkowie zamiast porównań każdy z każdym (setki vendorów)
     const set = new Set(list);
     return list.filter(el => {
@@ -376,7 +421,49 @@
     }).slice(0, 3000);
   }
 
+  // ----------------------------------------------------------------------
+  // Przełączniki rysowane samym CSS-em: podłużny „tor” z okrągłą „gałką”, bez input/role/aria (np. oponeo.pl).
+  // Rozpoznajemy je po kształcie, a stan po położeniu gałki (po prawej = włączony).
+  // ----------------------------------------------------------------------
+  function knobOf(track) {
+    const tr = track.getBoundingClientRect();
+    for (const k of track.querySelectorAll('*')) {
+      const r = k.getBoundingClientRect();
+      if (r.width < 6 || r.height < 6 || Math.abs(r.width - r.height) > 3) continue;
+      if (r.width > tr.height + 2 || r.width >= tr.width * 0.75) continue;
+      if (parseFloat(getComputedStyle(k).borderTopLeftRadius) >= r.width * 0.3) return k;
+    }
+    return null;
+  }
+
+  function visualToggles(root) {
+    const out = [];
+    let all;
+    try { all = root.querySelectorAll('div, span, button, label, a, i, em'); } catch (e) { return out; }
+    if (!all.length || all.length > 4000) return out;
+    for (const el of all) {
+      if (el.hasAttribute(VIS)) { out.push(el); continue; }
+      const r = el.getBoundingClientRect();
+      if (r.width < 24 || r.width > 90 || r.height < 10 || r.height > 44) continue;
+      if (r.width < r.height * 1.3 || r.width > r.height * 3.5) continue;
+      if ((el.innerText || '').trim() || el.querySelector('input, [role="switch"], [role="checkbox"]')) continue;
+      if (!knobOf(el)) continue;
+      if (getComputedStyle(el).cursor !== 'pointer' && !el.closest('button, label, a, [onclick], [tabindex]')) continue;
+      el.setAttribute(VIS, '');
+      out.push(el);
+    }
+    return out;
+  }
+
+  function visualState(track) {
+    const k = knobOf(track);
+    if (!k) return false;
+    const tr = track.getBoundingClientRect(), kr = k.getBoundingClientRect();
+    return kr.left + kr.width / 2 > tr.left + tr.width / 2;
+  }
+
   function toggleState(el) {
+    if (el.hasAttribute(VIS)) return visualState(el);
     if (el.tagName === 'INPUT') return el.checked;
     return el.getAttribute('aria-checked') === 'true';
   }
@@ -470,18 +557,30 @@
    * Wcześniej każdy przełącznik czekał 40 ms — przy setkach dostawców to kilka sekund.
    */
   async function setToggles(items) {
-    const wrong = () => items.filter(([el, want]) => el.isConnected && toggleState(el) !== want);
+    // Przełącznik rysowany CSS-em, którego wygląd (klasa/styl toru lub gałki) zmienił się po kliknięciu, uznajemy
+    // za przełączony, nawet jeśli gałka jeszcze jedzie (wolna animacja, karta w tle) — ponowne kliknięcie cofnęłoby zmianę.
+    const looks = el => { const k = knobOf(el); return [el, k].map(n => n ? `${n.className}|${n.getAttribute('style')}` : '').join('#'); };
+    const before = new Map(items.filter(([el]) => el.hasAttribute(VIS)).map(([el]) => [el, looks(el)]));
+    const assumed = new Set();
+    const wrong = () => items.filter(([el, want]) => el.isConnected && !assumed.has(el) && toggleState(el) !== want);
     // co ~50 ms oddajemy sterowanie, żeby limit czasu obsługi (runHandle) mógł przerwać pętlę na wolnej stronie
     let lastYield = performance.now();
     const breathe = async () => {
-      if (performance.now() - lastYield > 50) { await sleep(0); lastYield = performance.now(); }
+      if (performance.now() - lastYield > 50) { await yieldNow(); lastYield = performance.now(); }
       checkAbort();
     };
     let todo = wrong();
     const changed = new Set(todo.map(([el]) => el));
+    // przełączniki rysowane CSS-em: gałka przesuwa się z animacją — stan czytelny dopiero po jej końcu
+    const settle = list => sleep(list.some(([el]) => el.hasAttribute(VIS)) ? 400 : 60);
     for (const [el] of todo) { await breathe(); el.click(); }
-    if (todo.length) await sleep(60);
-    todo = wrong();
+    if (todo.length) await settle(todo);
+    for (const [el] of todo) if (before.has(el) && looks(el) !== before.get(el)) assumed.add(el);
+    // wizualne: jedno ponowne kliknięcie tych, które nadal są źle i nie zmieniły wyglądu (etykiety i `checked` ich nie dotyczą)
+    const vis = wrong().filter(([el]) => el.hasAttribute(VIS));
+    for (const [el] of vis) { await breathe(); el.click(); }
+    if (vis.length) await settle(vis);
+    todo = wrong().filter(([el]) => !el.hasAttribute(VIS));
     for (const [el] of todo) {
       await breathe();
       const rn = el.getRootNode();
@@ -588,8 +687,92 @@
     } catch { return false; }
   }
 
+  // ----------------------------------------------------------------------
+  // Strony i okna płatności (bramki, kasy sklepów) nigdy nie są okienkiem zgody: nie wykrywamy ich heurystycznie,
+  // nie ukrywamy, nie pytamy o „zgodę albo płać” i nie proponujemy zgłoszenia. Znane CMP (reguły) działają dalej.
+  // ----------------------------------------------------------------------
+  const PAY_HOST_RE = /(^|\.)(przelewy24\.pl|payu\.(com|pl)|tpay\.com|paynow\.pl|dotpay\.pl|blik\.com|autopay\.(pl|eu)|bluemedia\.pl|imoje\.pl|paypal\.com|stripe\.com|checkout\.com|adyen\.com|klarna\.com|paypo\.pl|revolut\.com|mollie\.com|braintreegateway\.com|worldpay\.com|sumup\.com|paysafe\.com|skrill\.com|trustly\.com|sofort\.com|cardinalcommerce\.com|pay\.google\.com)$/;
+  const PAY_SUB_RE = /^(pay|pays|payment|payments|checkout|platnosc|platnosci|3ds|3dsecure|acs)\./;
+  const CARD_SEL = 'input[autocomplete^="cc-"], input[name*="cardnumber" i], input[name*="card_number" i], input[name*="cvv" i], input[name*="cvc" i], ' +
+    'iframe[src*="stripe.com"], iframe[src*="adyen"], iframe[src*="braintree"], iframe[src*="przelewy24"], iframe[src*="payu"], iframe[src*="tpay"], iframe[name*="card" i]';
+
+  function onPaymentHost() {
+    return [location.hostname, topHost].some(h => h && (PAY_HOST_RE.test(h.toLowerCase()) || PAY_SUB_RE.test(h.toLowerCase())));
+  }
+
+  function looksLikePayment(el, text) {
+    try { if (el && el.querySelector && el.querySelector(CARD_SEL)) return true; } catch (e) { /* ignore */ }
+    const t = text != null ? text : norm(el ? deepText(el) : '');
+    let methods = 0;
+    for (const re of R.PAY_METHOD) if (re.test(t)) methods++;
+    return methods >= 3 || (methods >= 1 && any(t, R.TXT_CHECKOUT));
+  }
+
+  /** Okienko mówi o zgodzie na cookies/śledzenie (a nie np. o regulaminie płatności czy danych osobowych w ogóle). */
+  function consentEvidence(t) {
+    return any(t, R.TXT_STRONG) ||
+      (/zgod|consent|einwillig|zustimm|consentement|consentimiento/.test(t) && /partner|reklam|advertis|werbung|publicit|vendor|dostawc/.test(t));
+  }
+
   function hasButtons(b) {
     return b.reject.length + b.accept.length + b.settings.length + b.save.length > 0;
+  }
+
+  // ----------------------------------------------------------------------
+  // Wykrywanie od treści: nazwy klas (Tailwind, CSS-in-JS) i głębokość w DOM są dowolne, ale okienko zgody
+  // zawsze mówi o cookies/prywatności i „pływa” nad stroną. Szukamy więc tekstu, a od niego w górę drzewa
+  // najbliższego pływającego kontenera (fixed/sticky/dialog).
+  // ----------------------------------------------------------------------
+  const HINT_RE = /cookie|ciastecz|ciasteczk|\brodo\b|gdpr|rgpd|dsgvo|prywatno|privacy|consent|zgod[ayęe]|datenschutz|einwillig|consentement|privacidad|tracking|tracker/i;
+  const HINT_SKIP = /^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|TITLE|OPTION|TEXTAREA)$/;
+
+  function textAnchoredBoxes(maxHits = 150) {
+    const floatCache = new Map();
+    const floating = el => {
+      if (!floatCache.has(el)) {
+        let f = false;
+        try {
+          const pos = getComputedStyle(el).position;
+          f = pos === 'fixed' || pos === 'sticky' || el.matches('dialog[open], [role="dialog"], [role="alertdialog"], [aria-modal="true"]');
+        } catch (e) { /* ignore */ }
+        floatCache.set(el, f);
+      }
+      return floatCache.get(el);
+    };
+    const boxOf = start => {
+      let inner = null;
+      for (let n = start, d = 0; n && n !== document.body && n !== document.documentElement && d < 30; n = parentOf(n), d++) {
+        if (n.id && n.id.startsWith('ccr-')) return null;
+        if (floating(n)) { inner = n; break; }
+      }
+      if (!inner) return null;
+      // pływające opakowania wokół (np. pełnoekranowe przyciemnienie) — najbardziej zewnętrzne, które nie dodaje treści
+      const len = (inner.innerText || '').length;
+      let best = inner;
+      for (let n = parentOf(inner), d = 0; n && n !== document.body && n !== document.documentElement && d < 10; n = parentOf(n), d++) {
+        if (!floating(n)) continue;
+        if ((n.innerText || '').length > len * 1.5 + 200) break;
+        best = n;
+      }
+      return best;
+    };
+    const out = new Set(), seen = new Set();
+    const roots = document.body ? [document.body, ...shadowHosts(document.body).map(h => h.shadowRoot)] : [];
+    let hits = 0;
+    for (const r of roots) {
+      if (!r) continue;
+      const w = document.createTreeWalker(r, NodeFilter.SHOW_TEXT);
+      for (let t = w.nextNode(); t && hits < maxHits; t = w.nextNode()) {
+        const v = t.nodeValue;
+        if (!v || v.length < 4 || !HINT_RE.test(v)) continue;
+        const p = t.parentElement || (t.parentNode && t.parentNode.host);
+        if (!p || seen.has(p) || HINT_SKIP.test(p.tagName)) continue;
+        seen.add(p); hits++;
+        const box = boxOf(p);
+        if (box) out.add(box);
+      }
+    }
+    return [...out];
   }
 
   function findBanners() {
@@ -600,12 +783,14 @@
       }
     }
     if (out.length) return out;
+    if (onPaymentHost()) return out; // bramka płatności — tylko znane CMP
 
     const cands = new Set(deepQueryAll(document, CAND_SEL));
     if (document.body) {
       for (const el of document.body.querySelectorAll(':scope > *, :scope > * > *')) cands.add(el);
       for (const h of shadowHosts(document.body)) cands.add(h);
     }
+    try { for (const el of textAnchoredBoxes()) cands.add(el); } catch (e) { log('textAnchoredBoxes', e); }
     const good = [];
     for (const el of cands) {
       if (el === document.body || el === document.documentElement) continue;
@@ -616,6 +801,7 @@
       if (text.length < 20 || text.length > 12000) continue;
       const score = cookieScore(text);
       if (score < 3) continue;
+      if (looksLikePayment(el, text)) continue;
       const floating = isFloating(el);
       const staticOk = score >= 5 && text.length < 2000 && parentOf(el) === document.body;
       if (!floating && !staticOk) continue;
@@ -643,13 +829,22 @@
     cands.push(root);
     for (const { root: r } of findBanners()) cands.push(r);
     cands.push(...deepQueryAll(document, '[role="dialog"], [aria-modal="true"], dialog[open]'));
+    try { cands.push(...textAnchoredBoxes()); } catch (e) { /* ignore */ }
     let best = null, bestN = 0;
-    for (const c of new Set(cands)) {
-      if (!isShown(c)) continue;
+    const shown = [...new Set(cands)].filter(c => isShown(c));
+    for (const c of shown) {
       const n = getToggles(c).filter(t => !toggleDisabled(t)).length;
       if (n > bestN) { best = c; bestN = n; }
     }
-    return best;
+    if (best) return best;
+    // Ustawienia otworzyły osobne okno bez rozpoznawalnych przełączników, ale z „Zapisz”/„Odrzuć” —
+    // to też panel (nie czekamy na przełączniki do końca limitu, „Odrzuć wszystkie” w nim zadziała)
+    for (const c of shown) {
+      if (c === root || containsDeep(c, root) || containsDeep(root, c)) continue;
+      const b = analyze(c, cmp);
+      if (b.save.length || b.reject.length) return c;
+    }
+    return null;
   }
 
   // ======================================================================
@@ -766,8 +961,10 @@
   /** Okienko wyglądające na zgodę cookie, w którym nie rozpoznaliśmy żadnego przycisku. */
   function findUnrecognized(minScore = 6) {
     let best = null, bestScore = 0;
+    if (onPaymentHost()) return null;
     const cands = new Set(deepQueryAll(document, CAND_SEL));
     if (document.body) for (const el of document.body.querySelectorAll(':scope > *, :scope > * > *')) cands.add(el);
+    try { for (const el of textAnchoredBoxes()) cands.add(el); } catch (e) { /* ignore */ }
     for (const el of cands) {
       if (el === document.body || el === document.documentElement) continue;
       if (el.id && el.id.startsWith('ccr-')) continue;
@@ -776,6 +973,7 @@
       if (text.length < 40 || text.length > 4000) continue;
       const sc = cookieScore(text);
       if (sc < minScore) continue;
+      if (looksLikePayment(el, text)) continue;
       if (!actionables(el).some(isVisible)) continue;
       if (sc > bestScore || (sc === bestScore && best && containsDeep(el, best))) { best = el; bestScore = sc; }
     }
@@ -829,12 +1027,20 @@
       return { ok: false };
     }
     await sleep(150);
+    // panel bywa wstawiany przed swoją zawartością — chwila na przełączniki
+    if (!getToggles(panel).length) await waitFor(() => getToggles(panel).length, 600);
     const res = await applyToggles(panel, prefs);
     res.changed += await applyButtonPairs(panel, prefs);
     await handleLegitimateInterest(panel, prefs, res);
     if (!res.found) return { ok: false, opened: true, panel };
 
-    const pb = analyze(panel, cmp);
+    let pb = analyze(panel, cmp);
+    if (!pb.save.length) {
+      // panel może się jeszcze pojawiać (animacja przezroczystości) — chwila na „Zapisz”, potem bez wymogu nieprzezroczystości
+      await waitFor(() => analyze(panel, cmp).save.length, 1500);
+      pb = analyze(panel, cmp);
+      if (!pb.save.length && panel !== root) pb = analyze(panel, cmp, true);
+    }
     const save = pb.save[0] || (cmp && cmp.save && deepQueryAll(document, cmp.save).find(isVisible));
     if (!save) return { ok: false, opened: true, panel };
     const info = { cats: summarizeCats(res.cats), changed: res.changed };
@@ -847,7 +1053,8 @@
   async function tryReject(root, cmp, panel) {
     for (const scope of [panel, root].filter(Boolean)) {
       if (!isShown(scope)) continue;
-      const b = analyze(scope, cmp);
+      let b = analyze(scope, cmp);
+      if (!b.reject.length && scope === panel && panel !== root) b = analyze(scope, cmp, true); // panel otwarty przez nas, jeszcze się pojawia
       if (b.reject.length) {
         if (!IS_TOP) report('reject', cmp);
         await click(b.reject[0]);
@@ -917,12 +1124,18 @@
     reveal();
     const scope = (panel && isVisible(panel)) ? panel : root;
     b = analyze(scope, cmp);
+    const text = norm(deepText(scope));
+    // Pytanie o „zgodę albo płać”, ścianę albo ukrycie banera tylko dla okienka, które wprost mówi o zgodzie
+    // na cookies/śledzenie — nigdy dla okna płatności (bramka, kasa sklepu), regulaminu czy formularza.
+    if (onPaymentHost() || looksLikePayment(scope, text) || (!cmp && !consentEvidence(text))) {
+      log('to nie okienko zgody (płatność / brak mowy o cookies) — zostawiam');
+      return 'left';
+    }
     if (!b.accept.length) {
       log('brak przycisków do obsłużenia');
       offerReport(root, panel, cmp, (b.reject.length || b.settings.length) ? 'reject-failed' : 'no-accept');
       return 'offered';
     }
-    const text = norm(deepText(scope));
     const pay = b.pay.length > 0 || any(text, R.TXT_PAY);
     if (pay) { await handleWall(scope, cmp, b, 'pay'); return 'left'; }
     if (b.reject.length || b.settings.length) { // jest wybór, ale nie zadziałał — nie akceptujemy na ślepo
@@ -961,11 +1174,14 @@
   /** handle() z limitem czasu: po jego przekroczeniu przerywa obsługę (kolejne kliknięcia rzucają wyjątek). */
   async function runHandle(root, cmp) {
     let timer;
-    const timeout = new Promise(r => { timer = setTimeout(() => r('timeout'), HANDLE_TIMEOUT_MS); });
+    pageJankMs = 0;
+    handleT0 = performance.now();
+    const timeout = new Promise(r => { timer = setInterval(() => { if (overDeadline()) r('timeout'); }, 250); });
     const run = handle(root, cmp).catch(e => { log('handle error', e); return 'error'; });
     const result = await Promise.race([run, timeout]);
-    clearTimeout(timer);
-    if (result === 'timeout') { aborted = true; log('obsługa trwa zbyt długo — przerywam'); }
+    clearInterval(timer);
+    handleT0 = 0;
+    if (result === 'timeout' && !aborted) { aborted = true; log('obsługa trwa zbyt długo — przerywam'); }
     return result;
   }
 
@@ -1011,12 +1227,14 @@
       return;
     }
     if (msg.type === 'collect-report') {
-      // ręczne zgłoszenie z popupu: odpowiada ramka, w której jest okienko; ramka główna zawsze (z opóźnieniem)
-      if (!settings) return;
-      const found = findBanners()[0];
-      const el = found ? found.root : findUnrecognized(3);
-      if (el) { sendResponse({ data: collectReport(el, null, found ? found.cmp : null, 'manual') }); return; }
-      if (IS_TOP) { setTimeout(() => sendResponse({ data: collectReport(null, null, null, 'manual') }), 500); return true; }
+      // ręczne zgłoszenie z popupu: odpowiada ramka, w której jest okienko; ramka główna zawsze
+      // (także bez znalezionego okienka i bez wczytanych ustawień — zgłoszenie ma dojść w każdym przypadku)
+      let found = null, el = null;
+      try { found = findBanners()[0] || null; el = found ? found.root : findUnrecognized(3); } catch (e) { log('collect-report', e); }
+      let data = null;
+      try { data = collectReport(el, null, found ? found.cmp : null, 'manual'); } catch (e) { log('collect-report', e); }
+      if (el && data) { sendResponse({ data }); return; }
+      if (IS_TOP && !msg.frames) { sendResponse({ data: data || collectReport(null, null, null, 'manual') }); return; }
       return;
     }
     if (msg.type === 'toast' && IS_TOP) {

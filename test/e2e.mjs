@@ -32,7 +32,10 @@ const CASES = [
   ['wall', r => r.prompt && !r.clicked, 5000],
   ['wp', r => r.prompt && !r.clicked && r.wpSaved?.every(v => v === 'false'), 12000],
   ['cmp', r => r.clicked?.what === 'save' && r.clicked.cmpOn === 0 && !r.opisClicked && !r.report, 15000],
-  ['shell', r => !r.clicked && !r.report && !r.prompt && !r.toast, 8000]
+  ['shell', r => !r.clicked && !r.report && !r.prompt && !r.toast, 8000],
+  ['deep', r => r.clicked?.what === 'reject' && !r.report, 8000],
+  ['gateway', r => !r.clicked && !r.prompt && !r.report && !r.toast && !r.clipEver && !r.bannerHidden, 8000],
+  ['visual', r => r.clicked?.what === 'save' && r.vis?.join() === '1,0,0' && !r.report, 12000]
 ];
 
 const PROBE = `JSON.stringify({
@@ -43,6 +46,8 @@ const PROBE = `JSON.stringify({
   opisClicked: window.__opisClicked || 0,
   clicked: window.__clicked || null,
   clickHidden: window.__clickHidden || [],
+  vis: window.__vis || null,
+  clipEver: !!window.__clipEver,
   clickScroll: window.__clickScroll || [],
   inlineOverflow: document.documentElement.style.overflow + '|' + document.body.style.overflow,
   wpSaved: window.__wpSaved || null,

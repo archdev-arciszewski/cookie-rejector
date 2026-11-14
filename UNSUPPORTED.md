@@ -6,4 +6,8 @@ Gdy obsługa zostanie dodana, plik przypadku usuwa się w PR z poprawką i odśw
 
 > Plik generowany automatycznie (`python tools/unsupported_list.py`). Nie edytuj go ręcznie.
 
-_Brak zgłoszeń._
+Przypadków: **1**
+
+| Domena | Zgłoszono | CMP | Problem | Szczegóły |
+|---|---|---|---|---|
+| x-kom.pl | 2026-11-14 | — | odrzucenie / ustawienia nie zadziałały | [x-kom.pl.md](unsupported/x-kom.pl.md) |

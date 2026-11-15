@@ -6,4 +6,8 @@ Gdy obsługa zostanie dodana, plik przypadku usuwa się w PR z poprawką i odśw
 
 > Plik generowany automatycznie (`python tools/unsupported_list.py`). Nie edytuj go ręcznie.
 
-_Brak zgłoszeń._
+Przypadków: **1**
+
+| Domena | Zgłoszono | CMP | Problem | Szczegóły |
+|---|---|---|---|---|
+| google.com | 2026-11-15 | — | odrzucenie / ustawienia nie zadziałały | [google.com.md](unsupported/google.com.md) |

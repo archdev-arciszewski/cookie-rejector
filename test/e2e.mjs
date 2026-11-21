@@ -41,6 +41,13 @@ const CASES = [
   ['selected', r => r.clicked?.what === 'save' && r.clicked.state.xk1 === true && !r.clicked.state.xk2 && !r.clicked.state.xk3 && !r.clicked.state.xk4 && !r.report, 12000],
   ['nosave', r => r.clicked?.what === 'close' && Object.values(r.clicked.state).every(v => v === false) && !r.report, 10000],
   ['appinfo', r => r.bannerHidden && !r.clicked && !r.prompt && !r.report, 6000],
+  ['reopen', r => r.clicked?.what === 'reject' && !r.reopened && !r.report, 8000],
+  ['rejectsave', r => r.clicked?.what === 'save' && r.rsAll === 'off' && !r.report, 12000],
+  ['fade', r => r.clicked?.what === 'reject' && !r.report, 8000],
+  ['closex', r => r.clicked?.what === 'close' && !r.prompt && !r.report, 8000],
+  ['iubendapay', r => !r.clicked && r.prompt, 8000],
+  ['loginbar', r => !r.clicked && !r.report && !r.prompt && !r.toast, 8000],
+  ['objection', r => r.clicked?.what === 'save' && r.clicked.state.ob1 === false && r.clicked.state.ob2 === false && r.clicked.state.ob3 === true && !r.report, 10000],
   ['idosell', r => r.clicked?.what === 'reject' && !r.clicked.state.iai_an && !r.clicked.state.iai_mk && !r.report, 8000]
 ];
 
@@ -53,6 +60,8 @@ const PROBE = `JSON.stringify({
   clicked: window.__clicked || null,
   clickHidden: window.__clickHidden || [],
   vis: window.__vis || null,
+  reopened: window.__reopened || 0,
+  rsAll: window.__rsAll || null,
   clipEver: !!window.__clipEver,
   clickScroll: window.__clickScroll || [],
   inlineOverflow: document.documentElement.style.overflow + '|' + document.body.style.overflow,

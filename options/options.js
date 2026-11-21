@@ -6,7 +6,7 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 const METHOD = {
-  granular: 'własny wybór', reject: 'odrzucono', api: 'API CMP', hidden: 'ukryto baner', 'info-accept': 'OK na banerze',
+  granular: 'własny wybór', reject: 'odrzucono', api: 'API CMP', hidden: 'ukryto baner', closed: 'zamknięto bez zgody', 'info-accept': 'OK na banerze',
   'wall-accept': 'ściana: zaakceptowano', 'wall-decline': 'ściana: odmówiono',
   report: 'zgłoszono okienko', 'report-failed': 'zgłoszenie nieudane'
 };

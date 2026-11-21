@@ -84,6 +84,7 @@
           <div class="p"><b>Wybór spersonalizowanych reklam</b> <span class="sw" role="switch" aria-checked="false" aria-label="Zgoda" onclick="tg(this)"></span> <span class="sw" role="switch" aria-checked="true" aria-label="Uzasadniony interes" onclick="tg(this)"></span></div>
           <div class="p"><b>Pomiar wydajności treści</b> <span class="sw" role="switch" aria-checked="false" aria-label="Zgoda" onclick="tg(this)"></span> <span class="sw" role="switch" aria-checked="true" aria-label="Uzasadniony interes" onclick="tg(this)"></span></div>
           <div class="p"><b>Funkcjonalność</b> <span class="sw" role="switch" aria-checked="false" aria-label="Zgoda" onclick="tg(this)"></span></div>
+          <div><h4>Funkcje specjalne</h4><div class="p"><b>Użycie dokładnych danych geolokalizacyjnych</b> <span class="sw" role="switch" aria-checked="false" aria-label="Zgoda" onclick="tg(this)"></span></div></div>
           <button onclick="done('save')">Zapisz i wyjdź</button>
         </div>
       </div></div>`,
@@ -225,6 +226,44 @@
         <div><button type="button" id="iai_acc2">Reklamowe pliki cookie</button> <label class="iai_cookie__switch"><input type="checkbox" name="marketing" id="iai_mk" aria-labelledby="iai_acc2"><span></span></label></div>
         <button class="acceptAll" onclick="done('accept-all')">Potwierdzam wszystkie</button>
         <button class="rejectAll" onclick="done('reject')">Potwierdzam wymagane</button></div></div>`,
+    // Po odrzuceniu strona pokazuje mały pływający przycisk „Ustawienia plików cookie” (ponowne otwarcie) — nie klikać
+    reopen: `
+      <div class="fixed" id="ro"><p>Używamy plików cookie w celach analitycznych i marketingowych.</p>
+        <button onclick="done('accept')">Akceptuję</button> <button onclick="roReject()">Odrzuć wszystkie</button></div>`,
+    // InMobi Choice: „Więcej opcji” podmienia treść okienka na listę celów bez przełączników; „Odrzucenie” tylko
+    // przestawia wybór, zapisuje dopiero „Zapisz i wyjdź”
+    rejectsave: `
+      <div class="overlay" id="rs"><div class="box" role="dialog" id="rsd"><p>Szanujemy Twoją prywatność. Razem z naszymi 1542 partnerami przechowujemy informacje na urządzeniu (cookies) i przetwarzamy dane osobowe.</p>
+        <button onclick="rsMore()">Więcej opcji</button> <button onclick="done('accept')">Akceptuję</button></div></div>`,
+    // Baner wjeżdża z opóźnieniem (przyciski niewidoczne przez chwilę), duński „Kun nødvendige” = tylko niezbędne
+    fade: `
+      <div id="silktide-wrapper" class="fixed"><div id="fd"><p>Vi bruger cookies på vores hjemmeside til at sikre, at siden fungerer korrekt og til at analysere trafikken.</p>
+        <span id="fdb" style="opacity:0"><button onclick="done('accept')">Accepter alle</button> <button onclick="done('reject')">Kun nødvendige</button> <button>Præferencer</button></span></div></div>`,
+    // Okienko bez odrzucenia, ale z „×” (np. Complianz TCF): zamknięcie nie jest zgodą — lepsze niż pytanie o akceptację
+    closex: `
+      <div class="overlay" id="cx"><div class="box"><button aria-label="Zamknij okno" onclick="done('close')" style="float:right">×</button>
+        <p>Aby zapewnić najlepsze wrażenia, my i nasi partnerzy używamy technologii takich jak pliki cookie do przechowywania informacji o urządzeniu.</p>
+        <button onclick="done('accept')">Zaakceptuj wszystkie</button></div></div>`,
+    // iubenda na stronie z abonamentem: przycisk z klasą „reject” mówi „Odrzuć i wykup abonament” — to ściana płatności
+    iubendapay: `
+      <div id="iubenda-cs-banner" class="fixed"><p>Utilizziamo cookie e tecnologie simili per finalità pubblicitarie, anche con partner terzi.</p>
+        <button class="iubenda-cs-accept-btn" onclick="done('accept')">Accetta</button>
+        <button class="iubenda-cs-reject-btn" onclick="done('pay')">Rifiuta e abbonati</button></div>`,
+    // Panel logowania przyklejony do boku strony, z linkiem „Ustawienia plików cookie” — to nie okienko zgody
+    loginbar: `
+      <div style="position:sticky;top:0;width:320px;background:#eee;padding:8px" id="lb"><h3>Zaloguj się</h3>
+        <input type="email" placeholder="E-mail"> <input type="password"> <button onclick="done('login')">Dalej</button>
+        <p>Korzystając z serwisu akceptujesz pliki cookie i politykę prywatności.</p>
+        <a href="#" onclick="done('cookie-settings');return false">Ustawienia plików cookie</a></div>`,
+    // Pole „Wyrażam sprzeciw…” (WP, OneTrust u Agory) działa odwrotnie: zaznaczone = odmowa uzasadnionego interesu.
+    // Opis innego celu („możesz wnieść sprzeciw w każdej chwili”) nie może odwrócić logiki zwykłego przełącznika zgody.
+    objection: `
+      <div class="overlay" id="ob"><div class="box" role="dialog"><h2>Ustawienia prywatności</h2>
+        <p>My i nasi partnerzy przetwarzamy dane osobowe i używamy plików cookie.</p>
+        <div><b>Pomiar efektywności reklam</b><p>Możesz wnieść sprzeciw w każdej chwili w ustawieniach.</p><input type="checkbox" id="ob1" checked></div>
+        <div><b>Rozumienie odbiorców dzięki statystyce</b><input type="checkbox" id="ob2" checked></div>
+        <div class="li"><span>Wyrażam sprzeciw dla przetwarzania moich danych osobowych na podstawie uzasadnionego interesu Zaufanych Partnerów</span> <input type="checkbox" id="ob3"></div>
+        <button onclick="done('save')">Zapisz moje wybory</button> <button onclick="done('accept')">Akceptuję wszystkie</button></div></div>`,
     // Ściana bez płatności (tylko akceptuj, pełnoekranowa)
     wall: `
       <div class="overlay"><div class="box"><p>Aby korzystać z serwisu, musisz zaakceptować pliki cookie i przetwarzanie danych (RODO).</p>
@@ -243,6 +282,22 @@
       ${rows.map(([h, d, id, on, dis]) => `<div><div><h3>${h}</h3><input type="checkbox" id="${id}" ${on ? 'checked' : ''} ${dis ? 'disabled' : ''}></div><p>${d}</p><button type="button">Pokaż więcej</button></div>`).join('')}
       <button onclick="document.getElementById('xkd').innerHTML='';done('back')">Wróć</button>
       <button onclick="done('save')">Akceptuję wybrane</button> <button onclick="done('accept-all')">Akceptuję wszystkie</button>`;
+  }
+  function roReject() {
+    done('reject');
+    setTimeout(() => {
+      const w = document.createElement('div');
+      w.setAttribute('role', 'dialog');
+      w.style.cssText = 'position:fixed;left:10px;bottom:10px;width:190px;height:36px;background:#eee';
+      w.innerHTML = '<button onclick="window.__reopened=(window.__reopened||0)+1">Ustawienia plików cookie</button>';
+      document.body.appendChild(w);
+    }, 300);
+  }
+  function rsMore() {
+    document.getElementById('rsd').innerHTML = `<p>Szanujemy Twoją prywatność — ustawienia. Partnerzy przetwarzają dane w poniższych celach.</p>
+      ${['Przechowywanie informacji na urządzeniu', 'Spersonalizowane reklamy', 'Pomiar efektywności treści'].map(t => `<div><button type="button" class="li">${t}</button></div>`).join('')}
+      <button onclick="window.__rsAll='off'">Odrzucenie</button> <button onclick="window.__rsAll='on'">Akceptacja</button>
+      <button onclick="done('save')">Zapisz i wyjdź</button>`;
   }
   function nsEnable() { document.getElementById('mcp_savesettings').setAttribute('aria-disabled', 'false'); }
   function tg(el) { el.setAttribute('aria-checked', el.getAttribute('aria-checked') === 'true' ? 'false' : 'true'); }
@@ -329,6 +384,7 @@
     // stopka sklepu i treść strony leżą bezpośrednio w <body> (jak na prawdziwych stronach)
     if (c === 'newsletter' || c === 'pageshell') document.body.insertBefore(document.getElementById('app').firstElementChild, document.getElementById('app'));
     // aplikacja: overflow:hidden na stałe, treść mieści się w oknie
+    if (c === 'fade') setTimeout(() => { document.getElementById('fdb').style.opacity = '1'; }, 1000);
     if (c === 'appinfo') { document.body.style.overflow = 'hidden'; document.documentElement.style.height = '100%'; }
   }, 300);
   // ?ext=1 → test z prawdziwie zainstalowanym rozszerzeniem (bez stubów i bez wstrzykiwania silnika)

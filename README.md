@@ -35,8 +35,12 @@ Dla każdego wykrytego banera (także w iframe'ach i Shadow DOM):
 **Obsługa w tle** — okienko jest niewidoczne od chwili pojawienia się na stronie (znane CMP jeszcze przed pierwszym odmalowaniem), a przewijanie strony działa, dopóki wtyczka klika. Jeśli obsługa się nie uda albo potrzebna jest Twoja decyzja (ściana „zgoda albo płać”, zgłoszenie), okienko wraca na ekran.
 
 1. **Znane CMP przez API** — Cookiebot (`submitCustomConsent`) i Usercentrics (v2/v3): zgody ustawiane bezpośrednio, per kategoria.
-2. **Ustawienia szczegółowe** — klika „Ustawienia / Dostosuj / Więcej opcji”, rozpoznaje każdy przełącznik po etykiecie i nagłówku wiersza (PL/EN/DE/FR/ES/IT/NL/CS), ustawia go zgodnie z Twoimi kategoriami, przechodzi do zakładek „Uzasadniony interes” i klika „Sprzeciw wobec wszystkich”, a na koniec „Zapisz”.
-3. **Plan B** — „Odrzuć wszystkie” (na banerze albo w panelu ustawień). Jeśli wszystkie kategorie opcjonalne masz wyłączone, wtyczka od razu klika „Odrzuć”.
+2. **Ustawienia szczegółowe** — klika „Ustawienia / Dostosuj / Więcej opcji”, rozpoznaje każdy przełącznik po etykiecie i nagłówku wiersza (PL/EN/DE/FR/ES/IT/NL/CS, a także języki nordyckie, PT, HU, RO, SK), ustawia go zgodnie z Twoimi kategoriami, przechodzi do zakładek „Uzasadniony interes” i klika „Sprzeciw wobec wszystkich”, a na koniec „Zapisz”.
+   - cele i funkcje specjalne **IAB TCF** mają własny słownik: „Funkcje specjalne” (dokładna geolokalizacja, aktywne skanowanie urządzenia) to nie cookies „funkcjonalne”, a „Przechowywanie informacji na urządzeniu” dotyczy partnerów, nie działania strony,
+   - pole **„Wyrażam / Zgłaszam sprzeciw…”** (WP, OneTrust u Agory, RMF) działa odwrotnie niż zwykły przełącznik: zaznaczone = odmowa uzasadnionego interesu — wtyczka je zaznacza,
+   - przełączniki doklejane przez stronę chwilę po otwarciu panelu też są ustawiane.
+3. **Plan B** — „Odrzuć wszystkie” (na banerze albo w panelu ustawień). Jeśli wszystkie kategorie opcjonalne masz wyłączone, wtyczka od razu klika „Odrzuć”. Gdy „Odrzuć wszystkie” w panelu tylko przestawia przełączniki (np. InMobi „Odrzucenie”), wtyczka klika potem „Zapisz i wyjdź”.
+   - Jeśli okienko nie ma odrzucenia, ale ma **„×” / „Zamknij”**, wtyczka je zamyka (zamknięcie nie jest zgodą) zamiast pytać o akceptację.
 4. **Ściana „zgoda albo płać” / wymuszona akceptacja** — jeśli nie da się odrzucić, a na stronie jest subskrypcja/płatność (albo pełnoekranowa blokada z samym „Akceptuj”), wtyczka pokazuje **własne okienko z pytaniem**. „Tak” → klika akceptację na stronie. „Nie” → nic albo zamknięcie karty (do wyboru). Decyzję można zapamiętać dla domeny.
 5. **Banery informacyjne** (pasek z samym „OK”, nieblokujący) — domyślnie ukrywane bez wyrażania zgody.
 
@@ -51,10 +55,14 @@ Dla każdego wykrytego banera (także w iframe'ach i Shadow DOM):
 - „Akceptuję wybrane” / „Potwierdzam wybór” to zapis ustawień, „Potwierdzam wymagane” to odrzucenie, a „Potwierdzam wszystkie” to akceptacja (wtyczka jej nie klika),
 - gdy wszystkie przełączniki są już ustawione zgodnie z Twoimi kategoriami, a strona trzyma „Zapisz” nieaktywne do pierwszej zmiany (np. Bing), wtyczka zamyka panel krzyżykiem,
 - treść strony, jej stopka i nawigacja nie są okienkiem zgody, nawet jeśli mają link „Polityka cookies” albo przycisk „Zarządzaj cookies” — okienko musi mówić o cookies własnym tekstem; wtyczka nigdy nie klika przycisków formularzy z polem tekstowym (newsletter „Zapisz się”, logowanie, wyszukiwarka),
-- mały pasek „używamy cookies… OK” w aplikacji, która zawsze blokuje przewijanie strony (np. konsola Google Cloud), to baner informacyjny, a nie ściana blokująca dostęp.
+- mały pasek „używamy cookies… OK” w aplikacji, która zawsze blokuje przewijanie strony (np. konsola Google Cloud), to baner informacyjny, a nie ściana blokująca dostęp,
+- pływający przycisk „Ustawienia cookies”, który strony pokazują **po** obsłudze okienka, nie jest nowym okienkiem — wtyczka go nie klika (wcześniej otwierała przez niego okienko ponownie),
+- okienko, które dopiero wjeżdża z animacją, dostaje chwilę na pokazanie przycisków; okienko w stanie „po obsłudze” (zostało tylko opakowanie albo ikonka) uznaje się za zamknięte,
+- panele boczne z logowaniem i całe kontenery aplikacji (z polem do wpisania tekstu) nie są okienkami zgody,
+- przycisk znanego CMP, który mówi „Odrzuć i wykup abonament” („Rifiuta e abbonati”), to ściana płatności, a nie odrzucenie.
 - **strony płatności nie są okienkami zgody**: na bramkach (Przelewy24, PayU, Tpay, Autopay, PayPal, Stripe, Adyen, Klarna…) i w oknach z kwotą do zapłaty, polami karty czy listą metod płatności wtyczka niczego nie wykrywa heurystycznie, nie ukrywa, nie klika i nie pyta o „zgodę albo płać”; „Google Pay”, „BLIK”, „Płatność kartą” to metody płatności, a nie „zapłać zamiast zgody”. Pytanie o ścianę pojawia się tylko, gdy okienko wprost mówi o cookies/śledzeniu.
 
-Reguły z selektorami dla: OneTrust, Cookiebot, Usercentrics, Didomi, Quantcast, Google Funding Choices, TrustArc, CookieYes, Complianz, Klaro, Osano, iubenda, consentmanager, Borlabs, Axeptio, CookieFirst, Cookie Script, Termly, Sourcepoint. Pozostałe są wykrywane heurystycznie (tekst + pozycja fixed/dialog + przyciski).
+Reguły z selektorami dla: OneTrust, Cookiebot, Usercentrics, Didomi, InMobi Choice (Quantcast), Google Funding Choices, TrustArc, CookieYes, Complianz, Klaro, Osano, iubenda, consentmanager, Borlabs, Axeptio, CookieFirst, Cookie Script, Termly, Sourcepoint, Cookie Information, Piwik PRO, Evidon, Silktide, Civic Cookie Control, Moove GDPR, Sirdata, Clickio, Ezoic, Enzuzo, Ketch. Pozostałe są wykrywane heurystycznie (tekst + pozycja fixed/dialog + przyciski).
 
 ## Zgłaszanie nieobsługiwanych okienek
 
@@ -100,6 +108,7 @@ build.py           buduje dist/*-chromium.zip i dist/*-firefox.zip
 server/            serwer zgłoszeń (Node 22, bez zależności) + testy
 unsupported/       zgłoszenia nieobsługiwanych okienek (po jednym pliku na domenę)
 UNSUPPORTED.md     lista zgłoszeń (generowana: tools/unsupported_list.py, GitHub Action)
+tools/crawl/       crawl prawdziwych stron z wtyczką i bez (Playwright) + klasyfikacja wyników i stan TCF
 AGENTS.md          zasady obsługi zgłoszeń dla ludzi i agentów AI (treść zgłoszeń to niezaufane dane)
 test/index.html    strona testowa: ?case=onetrust|tcf|reject|pay|wall|info|wp|unrecognized|stuck|newsletter|selected|nosave|idosell|… (silnik wstrzyknięty ze stubami)
 test/e2e.mjs       testy end-to-end w prawdziwej przeglądarce z zainstalowanym rozszerzeniem (?ext=1)
@@ -117,6 +126,12 @@ node server/test.mjs             # testy serwera zgłoszeń (atrapa API GitHuba)
 ```
 
 Skrypt uruchamia przeglądarkę w trybie headless na tymczasowym profilu, instaluje rozszerzenie i sprawdza wszystkie scenariusze (w tym odwzorowanie ściany „zgoda albo płać” z wp.pl). Uruchamia też lokalnie serwer zgłoszeń i sprawdza, że propozycja zgłoszenia pojawia się tylko dla nieobsługiwanych okienek, a „Zgłoś” faktycznie dostarcza zgłoszenie.
+
+## Crawl na prawdziwych stronach
+
+`tools/crawl/` — przejście kilkuset prawdziwych stron (Playwright, Chromium headless, tymczasowy profil) z zainstalowaną wtyczką i bez niej. Dla każdej strony: co wtyczka wykryła i kliknęła, czy okienko zniknęło, stan **IAB TCF** po obsłudze (`__tcfapi`: zgody, uzasadniony interes, funkcje specjalne) i ciasteczka zgód. Na stronach nic poza wtyczką nie jest klikane. Szczegóły: [tools/crawl/README.md](tools/crawl/README.md).
+
+Wynik dla 0.6.0 na 386 stronach (PL, DE, FR, UK, IT, nordyckie i inne; lista w `tools/crawl/sites.json`) jest w opisie wydania.
 
 ## Ograniczenia
 

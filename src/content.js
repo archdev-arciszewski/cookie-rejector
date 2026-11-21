@@ -141,8 +141,9 @@
     if (root.closest && root.closest('[aria-modal="true"], dialog[open]')) return true;
     const r = root.getBoundingClientRect();
     if (r.width * r.height > 0.45 * innerWidth * innerHeight) return true;
+    const scrollable = Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0) > innerHeight + 40;
     for (const el of [document.documentElement, document.body]) {
-      if (el && getComputedStyle(el).overflow === 'hidden') return true;
+      if (scrollable && el && getComputedStyle(el).overflow === 'hidden') return true;
     }
     // nakładka zasłaniająca środek ekranu
     const c = document.elementFromPoint(innerWidth / 2, innerHeight / 2);
@@ -192,6 +193,7 @@
     if (!t || t.length > 90) return null;
     // płatność ma pierwszeństwo: "Nadal odrzucam, chcę zapłacić" to NIE jest zwykłe "Odrzuć"
     if (any(t, R.PAY_METHOD)) return null; // „Google Pay”, „BLIK”, „Płatność kartą” — metoda płatności, nie przycisk zgody
+    if (any(t, R.BTN_NOT_CONSENT)) return null; // „Zapisz się” do newslettera, „Zaloguj” — nie dotyczy zgód
     if (any(t, R.BTN_PAY) && !any(t, R.PAY_NEGATED)) return 'pay';
     if (any(t, R.BTN_REJECT)) return 'reject';
     const acc = any(t, R.BTN_ACCEPT);
@@ -241,10 +243,24 @@
     return [...set].filter(el => !drop.has(el));
   }
 
+  /** Przycisk formularza z polem e-mail/hasła/tekstu (newsletter, logowanie, wyszukiwarka) — nie jest częścią okienka zgód. */
+  const FORM_INPUT_SEL = 'input[type="email"], input[type="password"], input[type="text"], input[type="search"], input[type="tel"], input:not([type]), textarea';
+  function inUserForm(el) {
+    const f = el.closest && el.closest('form');
+    return !!(f && f.querySelector(FORM_INPUT_SEL));
+  }
+
+  /** Nieaktywny przycisk (np. „Zapisz” aktywne dopiero po zmianie ustawień). */
+  function isDisabled(el) {
+    return !!(el.disabled || el.getAttribute('aria-disabled') === 'true' ||
+      (el.closest && el.closest('[aria-disabled="true"], [disabled]')) || /(^|[_-])disabled|disabled(btn|-btn|_btn)?$/i.test(String(el.className || '')));
+  }
+
   function analyze(root, cmp, anyOpacity = false) {
     const b = { reject: [], save: [], settings: [], accept: [], pay: [], close: [] };
     const vis = el => visibleCheck(el, anyOpacity);
     for (const el of actionables(root)) {
+      if (!cmp && inUserForm(el)) continue;
       const c = classifyButton(labelOf(el));
       if (c && vis(el)) b[c].push(el); // widoczność tylko dla rozpoznanych (kosztowna przy setkach elementów)
     }
@@ -681,6 +697,9 @@
   /** Kontener całej strony (np. powłoka aplikacji GitHuba), w którym „Manage cookies” to tylko link w stopce. */
   function isPageShell(el) {
     try {
+      // treść, nawigacja, nagłówek i stopka strony (np. link „Polityka cookies” / „Zarządzaj cookies” w stopce)
+      if (el.matches('main, [role="main"], nav, [role="navigation"]')) return true;
+      if (el.matches('footer, header, [role="contentinfo"], [role="banner"]') && !isFloating(el)) return true;
       if (el.querySelector('main, [role="main"]')) return true;
       return !!(el.querySelector('nav, [role="navigation"]') && el.querySelector('footer, [role="contentinfo"]') &&
         el.querySelector('header, [role="banner"]'));
@@ -775,6 +794,28 @@
     return [...out];
   }
 
+  /** Tekst elementu bez linków, przycisków i etykiet — „Polityka cookies” w stopce to nie okienko zgody. */
+  const NON_PROSE = 'a, button, [role="button"], label, select, option, script, style';
+  function proseText(el) {
+    const parts = [];
+    try {
+      const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
+        acceptNode: t => {
+          const c = t.parentElement && t.parentElement.closest(NON_PROSE);
+          return c && el.contains(c) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+        }
+      });
+      for (let t = w.nextNode(), n = 0; t && n < 3000; t = w.nextNode(), n++) parts.push(t.nodeValue);
+    } catch (e) { return ''; }
+    return norm(parts.join(' '));
+  }
+
+  /** Czy element mówi o cookies własnym tekstem (a nie tylko etykietami linków/przycisków). */
+  function talksAboutCookies(el) {
+    if (el.shadowRoot || el.querySelector('iframe')) return true; // treść w Shadow DOM / ramce — nie rozbieramy
+    return any(proseText(el), R.TXT_STRONG);
+  }
+
   function findBanners() {
     const out = [];
     for (const cmp of R.CMPS) {
@@ -806,6 +847,7 @@
       const staticOk = score >= 5 && text.length < 2000 && parentOf(el) === document.body;
       if (!floating && !staticOk) continue;
       if (isPageShell(el)) continue;
+      if ((!floating || text.length > 600) && !talksAboutCookies(el)) continue;
       if (!hasButtons(analyze(el))) continue;
       good.push(el);
     }
@@ -974,6 +1016,7 @@
       const sc = cookieScore(text);
       if (sc < minScore) continue;
       if (looksLikePayment(el, text)) continue;
+      if (text.length > 600 && !talksAboutCookies(el)) continue;
       if (!actionables(el).some(isVisible)) continue;
       if (sc > bestScore || (sc === bestScore && best && containsDeep(el, best))) { best = el; bestScore = sc; }
     }
@@ -1041,13 +1084,42 @@
       pb = analyze(panel, cmp);
       if (!pb.save.length && panel !== root) pb = analyze(panel, cmp, true);
     }
-    const save = pb.save[0] || (cmp && cmp.save && deepQueryAll(document, cmp.save).find(isVisible));
-    if (!save) return { ok: false, opened: true, panel };
+    const saves = [...pb.save, ...((cmp && cmp.save) ? deepQueryAll(document, cmp.save).filter(isVisible) : [])];
+    const save = saves.find(el => !isDisabled(el));
     const info = { cats: summarizeCats(res.cats), changed: res.changed };
+    if (!save && saves.length && !res.changed) {
+      // np. Bing: wszystkie przełączniki już wyłączone, „Zapisz ustawienia” aktywne dopiero po zmianie —
+      // stan jest zgodny z ustawieniami, więc zamykamy panel (krzyżyk) albo go ukrywamy
+      log('granular: „Zapisz” nieaktywne, nic do zmiany — zamykam panel');
+      const x = closeButtonOf(panel);
+      if (x) { await click(x); if (await waitGone([panel], 1500)) { report('granular', cmp, info); return { ok: true }; } }
+      hideBanner(panel);
+      report('granular', cmp, info);
+      return { ok: true };
+    }
+    if (!save) return { ok: false, opened: true, panel };
     if (!IS_TOP) report('granular', cmp, info); // ramka CMP może zniknąć razem z banerem
     await click(save);
     if (await waitGone([root, panel], 3000)) { if (IS_TOP) report('granular', cmp, info); return { ok: true }; }
     return { ok: false, opened: true, panel };
+  }
+
+  /** Krzyżyk zamykający okienko: tekst „×/Zamknij”, aria-label/title albo id/klasa „close”, mały element. */
+  function closeButtonOf(root) {
+    const b = analyze(root, null);
+    if (b.close.length) return b.close[0];
+    const found = [];
+    for (const el of deepQueryAll(root, '[aria-label], [title], [id*="close" i], [class*="close" i]')) {
+      const t = norm(el.getAttribute('aria-label') || el.getAttribute('title') || '');
+      const named = R.BTN_CLOSE.test(t) || /^(close|zamknij)/.test(t);
+      const byName = /close|zamknij/i.test(`${el.id} ${typeof el.className === 'string' ? el.className : ''}`);
+      if (!named && !byName) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width > 80 || r.height > 80 || (el.innerText || '').trim().length > 12 || !isVisible(el)) continue;
+      found.push(el);
+    }
+    // kliknięcie w opakowanie nie dociera do obsługi na elemencie wewnątrz — wybierz element klikalny
+    return found.find(el => el.matches(ACTION_SEL) || getComputedStyle(el).cursor === 'pointer') || found[found.length - 1] || null;
   }
 
   async function tryReject(root, cmp, panel) {
@@ -1074,7 +1146,11 @@
   async function handleWall(root, cmp, b, kind) {
     if (wallAsked) return;
     wallAsked = true;
-    const resp = await send({ type: 'wall', kind, cmp: cmp ? cmp.name : null });
+    const t0 = handleT0;
+    handleT0 = 0; // czekamy na człowieka — limit czasu obsługi stoi
+    let resp;
+    try { resp = await send({ type: 'wall', kind, cmp: cmp ? cmp.name : null }); }
+    finally { if (t0) { handleT0 = performance.now(); pageJankMs = 0; } }
     const decision = resp && resp.decision;
     log('wall decision', decision);
     if (decision === 'accept') {

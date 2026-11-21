@@ -173,6 +173,58 @@
           </div>
         </footer>
       </div>`,
+    // Stopka sklepu (jak ckdrzwi.pl): newsletter z polem e-mail i zgodą marketingową, „Zarządzaj plikami cookie”
+    // i linki do polityk — to NIE jest okienko zgody: nic nie klikamy (zwłaszcza „Zapisz się”), nic nie ukrywamy
+    newsletter: `
+      <footer id="shopfoot"><div id="menu_newsletter"><form onsubmit="done('subscribe');return false">
+        <label>Zapisz się do newslettera</label> <span>Chcemy podzielić się z Tobą najnowszymi promocjami.</span>
+        <input type="text" id="mailing_email" placeholder="Podaj swój adres e-mail">
+        <input type="checkbox" id="mailing_policy"> <label for="mailing_policy">Wyrażam zgodę na przetwarzanie moich danych osobowych (adres e-mail) na potrzeby wysyłki newslettera z informacją handlową (marketing). Więcej w <a href="/polityka">polityce prywatności</a>.</label>
+        <button type="submit" onclick="done('subscribe-click')">Zapisz się</button></form></div>
+        <ul><li><a href="/regulamin">Regulamin</a></li><li><a href="/polityka">Polityka prywatności</a></li>
+          <li><button type="button" id="manageCookies" onclick="done('manage-cookies')">Zarządzaj plikami cookie</button></li></ul>
+        <p>Kontakt: ul. Przykładowa 2, 00-001 Warszawa. W sklepie prezentujemy ceny brutto.</p>
+      </footer>`,
+    // Treść strony (jak bab.la): <main> bezpośrednio w body, „Polityka dotycząca plików cookie” i „Consent Management”
+    // tylko jako linki/przyciski w stopce, pole „zapamiętaj mnie” logowania — to nie okienko zgody
+    pageshell: `
+      <main class="main" id="pmain"><h2>Słownik polsko-angielski</h2><p>obłożenie — occupancy, occupancy rate. Przykłady użycia w zdaniach.</p>
+        <label><input type="checkbox" id="social-login-remember"> Zapamiętaj mnie (logowanie przez media społecznościowe)</label>
+        <p>Copyright © przyklad. Wszelkie prawa zastrzeżone.</p>
+        <a href="/regulamin">Regulamin</a> <a href="/prywatnosc">Polityka prywatności</a> <a href="/cookies">Polityka dotycząca plików cookie</a>
+        <a href="/reklama">Reklama</a> <span role="button" tabindex="0" onclick="done('consent-management')">Consent Management</span>
+      </main>`,
+    // Okienko jak x-kom.pl: najpierw baner, po „Ustawieniach” lista kategorii z przełącznikami bez etykiet
+    // i przyciski „Wróć” / „Akceptuję wybrane” (= zapisz) / „Akceptuję wszystkie”
+    selected: `
+      <div class="overlay" id="xk"><div class="box" role="dialog" aria-modal="true" id="xkd">
+        <h2>Ta strona używa ciasteczek</h2><p>Używamy ciasteczek, aby strona działała, do analiz i reklam. Możesz wybrać, na które się zgadzasz.</p>
+        <button onclick="done('accept')">Akceptuję i przechodzę</button>
+        <button onclick="xkSettings()">Ustawienia</button></div></div>`,
+    // Panel preferencji jak na bing.com: wszystkie przełączniki już wyłączone, „Zapisz ustawienia” nieaktywne,
+    // dopóki nic się nie zmieni → zamknięcie krzyżykiem (stan już zgodny z ustawieniami), bez zgłoszenia
+    nosave: `
+      <div id="mcp_container" class="overlay"><div id="mcp_overlay" style="position:absolute;top:10px;right:10px"><div class="closeicon_overlay"><div id="closeicon" class="closeicon" style="width:24px;height:24px;cursor:pointer;background:#888" onclick="done('close')"></div></div></div>
+        <div class="box"><div class="mcp_head">Zarządzaj ustawieniami plików cookie</div><div>Korzystamy również z niezbędnych plików cookie, które nie mogą zostać wyłączone</div>
+        ${[['analytics', 'Analityczne:', 'Zezwalamy stronom trzecim na korzystanie z analitycznych plików cookie.'], ['sm', 'Media społecznościowe:', 'Używamy plików cookie mediów społecznościowych.'], ['ad', 'Reklamy:', 'Zezwól na korzystanie z plików cookie, aby zwiększyć trafność reklam.']]
+          .map(([id, h, d]) => `<div class="mcp_row"><div class="mcp_row_head">${h}</div><div>${d}</div><label class="switch"><input type="checkbox" id="${id}_checkbox" aria-label="${h}" onchange="nsEnable()"><span class="slider"></span></label><div>Wyłączone</div></div>`).join('')}
+        <div class="mcp_savesettings"><span class="cbtn"><a id="mcp_savesettings" aria-disabled="true" class="disabledbtn" onclick="if(this.getAttribute('aria-disabled')!=='true')done('save')">Zapisz ustawienia</a></span></div></div></div>`,
+    // Aplikacja (jak konsola Google Cloud): strona zawsze ma overflow:hidden i nic do przewinięcia, na dole mały pasek
+    // „używamy cookie… OK” — to baner informacyjny (ukryć), a nie ściana blokująca (bez pytania)
+    appinfo: `
+      <div id="glue-cookie-notification-bar-1" class="glue-cookie-notification-bar" role="region" style="position:fixed;bottom:0;left:0;right:0;background:#eee;padding:12px">
+        <p><span>Na tej stronie używamy plików cookie Google, aby poprawiać jakość usług i analizować ruch.</span> <a href="https://policies.example.com/cookies">Dowiedz się więcej</a></p>
+        <button onclick="done('ok')">OK</button></div>`,
+    // Okienko sklepu IdoSell (iai_cookie): przełączniki kategorii, „Potwierdzam wszystkie” (= akceptuj wszystko)
+    // przed „Potwierdzam wymagane” (= tylko niezbędne) — nie wolno pomylić ich z „Zapisz”
+    idosell: `
+      <div id="iai_cookie" class="iai_cookie overlay" role="dialog" aria-modal="true"><div class="box">
+        <h3>Dbamy o Twoją prywatność</h3><p>Sklep korzysta z plików cookie w celu realizacji usług zgodnie z <a href="/cookies">Polityką dotyczącą cookies</a>.</p>
+        <div><button type="button">Funkcjonalne pliki cookie (wymagane)</button> <small>Zawsze aktywne</small></div>
+        <div><button type="button" id="iai_acc1">Analityczne pliki cookie</button> <label class="iai_cookie__switch"><input type="checkbox" name="analytics" id="iai_an" aria-labelledby="iai_acc1"><span></span></label></div>
+        <div><button type="button" id="iai_acc2">Reklamowe pliki cookie</button> <label class="iai_cookie__switch"><input type="checkbox" name="marketing" id="iai_mk" aria-labelledby="iai_acc2"><span></span></label></div>
+        <button class="acceptAll" onclick="done('accept-all')">Potwierdzam wszystkie</button>
+        <button class="rejectAll" onclick="done('reject')">Potwierdzam wymagane</button></div></div>`,
     // Ściana bez płatności (tylko akceptuj, pełnoekranowa)
     wall: `
       <div class="overlay"><div class="box"><p>Aby korzystać z serwisu, musisz zaakceptować pliki cookie i przetwarzanie danych (RODO).</p>
@@ -182,6 +234,17 @@
     window.__toggleClicks = (window.__toggleClicks || 0) + 1;
     for (const t = performance.now(); performance.now() - t < 40;); // strona przetwarza kliknięcie ~40 ms
   }
+  function xkSettings() {
+    const rows = [['Ciasteczka, dzięki którym działa strona', 'Są niezbędne, by nasza strona działała prawidłowo, dlatego nie możesz z nich zrezygnować.', 'xk1', true, true],
+      ['Ciasteczka, dzięki którym poznamy Twoje potrzeby', 'Dane analityczne, które zbieramy, pozwalają nam poznać Twoje zachowanie.', 'xk2', true, false],
+      ['Ciasteczka, dzięki którym dopasujemy do Ciebie reklamy', 'Sprawdzamy, co przeglądasz, aby lepiej dopasować reklamy.', 'xk3', false, false],
+      ['Ciasteczka, dzięki którym dopasujemy do Ciebie stronę', 'Możemy dostosować dla Ciebie naszą stronę.', 'xk4', false, false]];
+    document.getElementById('xkd').innerHTML = `<h2>Ustawienia ciasteczek</h2><p>Poniżej możesz sprawdzić, jakie dane zbieramy w ciasteczkach. Nie na wszystkie musisz się zgodzić.</p>
+      ${rows.map(([h, d, id, on, dis]) => `<div><div><h3>${h}</h3><input type="checkbox" id="${id}" ${on ? 'checked' : ''} ${dis ? 'disabled' : ''}></div><p>${d}</p><button type="button">Pokaż więcej</button></div>`).join('')}
+      <button onclick="document.getElementById('xkd').innerHTML='';done('back')">Wróć</button>
+      <button onclick="done('save')">Akceptuję wybrane</button> <button onclick="done('accept-all')">Akceptuję wszystkie</button>`;
+  }
+  function nsEnable() { document.getElementById('mcp_savesettings').setAttribute('aria-disabled', 'false'); }
   function tg(el) { el.setAttribute('aria-checked', el.getAttribute('aria-checked') === 'true' ? 'false' : 'true'); }
   function done(what) {
     const state = {};
@@ -263,6 +326,10 @@
     if (c === 'tcf') document.documentElement.classList.add('ccr-test-locked');
     if (c === 'wp') { wpShow('main'); document.body.style.overflow = 'hidden'; }
     if (c === 'cmp') cmpSetup();
+    // stopka sklepu i treść strony leżą bezpośrednio w <body> (jak na prawdziwych stronach)
+    if (c === 'newsletter' || c === 'pageshell') document.body.insertBefore(document.getElementById('app').firstElementChild, document.getElementById('app'));
+    // aplikacja: overflow:hidden na stałe, treść mieści się w oknie
+    if (c === 'appinfo') { document.body.style.overflow = 'hidden'; document.documentElement.style.height = '100%'; }
   }, 300);
   // ?ext=1 → test z prawdziwie zainstalowanym rozszerzeniem (bez stubów i bez wstrzykiwania silnika)
   if (!params.get('ext')) {

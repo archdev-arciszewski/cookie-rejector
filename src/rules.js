@@ -7,7 +7,7 @@
   const BTN_REJECT = [
     /\bodrzuc/, /\bodrzucam/, /\bodmawiam/, /\bodmow/, /nie zgadzam/, /nie akceptuj/, /nie wyrazam zgody/, /nie zezwalam/,
     /(tylko|wylacznie|jedynie) (niezbedne|wymagane|konieczne|podstawowe|techniczne)/,
-    /(akceptuj|zaakceptuj|zezwol na|zgoda na|uzywaj) (tylko |wylacznie |jedynie )?(niezbedne|wymagane|konieczne|podstawowe)/,
+    /(akceptuj|zaakceptuj|zezwol na|zgoda na|uzywaj|potwierdz\w*|zapisz) (tylko |wylacznie |jedynie )?(niezbedne|wymagane|konieczne|podstawowe)/,
     /kontynuuj bez/, /przejdz dalej bez/, /bez (akceptacji|zgody)/,
     /\breject/, /\bdeclin/, /\bdeny\b/, /\brefuse/, /\bdisagree/, /do not (accept|agree|consent)/, /don'?t (accept|agree|consent)/,
     /(only|just|accept|use|allow) (strictly )?(necessary|essential|required)/, /(necessary|essential|required)( cookies)? only/,
@@ -21,7 +21,7 @@
   ];
 
   const BTN_SAVE = [
-    /\bzapisz/, /\bzapisuj/, /\bzapisac/, /\bzatwierdz/, /\bpotwierdz/, /(akceptuj|zaakceptuj|zezwol na|zapisz) (wybran|zaznaczon|moj wybor|wybor)/,
+    /\bzapisz/, /\bzapisuj/, /\bzapisac/, /\bzatwierdz/, /\bpotwierdz/, /(akceptuje?|zaakceptuj|zezwol na|zezwalam na|zapisz|potwierdz) (wybran|zaznaczon|moj wybor|wybor|moje ustawien)/,
     /\bsave\b/, /\bconfirm/, /(accept|allow) (selected|selection|my selection|current|chosen)/, /\bapply\b/, /\bsubmit\b/,
     /speicher/, /auswahl (bestatigen|erlauben|akzeptieren|zulassen|speichern)/, /\bbestatig/,
     /enregistr/, /\bvalider/, /\bconfirmer/,
@@ -29,6 +29,12 @@
     /\bsalva/, /\bconferm/,
     /\bopslaan/, /\bbevestig/,
     /\bulozit/, /\bpotvrdit/
+  ];
+
+  // „Zapisz się” (newsletter), „Zarejestruj”, „Subscribe” — to nie jest zapis ustawień zgód
+  const BTN_NOT_CONSENT = [
+    /\bzapisz sie\b/, /\bzapisuje sie\b/, /newsletter/, /zarejestruj/, /zaloguj/, /\bsign ?(up|in)\b/, /\blog ?in\b/, /\bregister\b/,
+    /anmelden/, /registrier/, /s'inscrire/, /\binscri/, /\bconnexion\b/, /iscriviti/, /accedi/, /aanmelden/, /inschrijven/, /prihlas/
   ];
 
   const WORD_ALL = [/wszystk/, /\ball\b/, /\balle\b/, /\btous\b/, /\btout\b/, /\btodas?\b/, /\btutt[ie]\b/, /\bvse\b/];
@@ -52,22 +58,22 @@
 
   // Nazwy metod płatności („Google Pay”, „PayPal”, „BLIK”…) — to nie jest „zapłać zamiast zgody”.
   const PAY_METHOD = [
-    /(google|apple|samsung|amazon|garmin|revolut) ?pay/, /paypal/, /paypo/, /payu/, /blik/, /visa/, /mastercard/,
-    /maestro/, /american express/, /klarna/, /tpay/, /przelewy ?24/, /p24/, /autopay/, /paynow/, /dotpay/,
+    /\b(google|apple|samsung|amazon|garmin|revolut) ?pay\b/, /\bpaypal/, /\bpaypo\b/, /\bpayu\b/, /\bblik\b/, /\bvisa\b/, /mastercard/,
+    /\bmaestro\b/, /american express/, /\bklarna\b/, /\btpay\b/, /przelewy ?24/, /\bp24\b/, /\bautopay\b/, /\bpaynow\b/, /\bdotpay\b/,
     /przelew (online|tradycyjny|bankowy)/, /platnosc (karta|blik|przelewem|online|odroczon)/, /karta (platnicza|kredytowa|debetowa)/,
-    /click to pay/, /sofort/, /ideal/, /bancontact/, /twint/, /skrill/, /paysafecard/, /trustly/
+    /click to pay/, /\bsofort\b/, /\bideal\b/, /\bbancontact\b/, /\btwint\b/, /\bskrill\b/, /paysafecard/, /\btrustly\b/
   ];
 
   // Strona/okno płatności: kwota do zapłaty, dane karty, regulamin operatora płatności.
   const TXT_CHECKOUT = [
-    /do zaplaty/, /kwota (do zaplaty|zamowienia|transakcji)/, /numer karty/, /data waznosci/, /cvv/, /cvc/, /kod blik/,
+    /do zaplaty/, /kwota (do zaplaty|zamowienia|transakcji)/, /numer karty/, /data waznosci/, /\bcvv\b/, /\bcvc\b/, /kod blik/,
     /wybierz (metode|sposob|forme) platnosci/, /metod[ay] platnosci/, /regulamin (przelewy24|payu|tpay|blik|autopay|paynow|dotpay)/,
     /amount due/, /total due/, /order total/, /card number/, /expiry date/, /security code/, /payment method/, /choose (a )?payment/,
     /zu zahlen/, /zahlungsart/, /kartennummer/, /montant a payer/, /moyen de paiement/, /importe a pagar/, /metodo de pago/
   ];
 
   const BTN_ACCEPT = [
-    /\bakceptuj/, /\bzaakceptuj/, /\bakceptuje/, /\bzgadzam/, /przejdz do (serwisu|strony)/, /przechodze do (serwisu|strony)/,
+    /\bakceptuj/, /\bzaakceptuj/, /\bakceptuje/, /\bpotwierdz\w* wszystk/, /\bconfirm all/, /alle bestatigen/, /\bzgadzam/, /przejdz do (serwisu|strony)/, /przechodze do (serwisu|strony)/,
     /\brozumiem/, /\bprzyjmuj/, /\bwlacz(am)? wszystk/, /wyrazam zgode/, /\bdaj zgode/, /\bzezwol/, /\bjasne\b/,
     /^ok\b/, /^okay\b/, /\baccept/, /\bagree/, /\ballow/, /^consent\b/, /^i consent/,/got it/, /\bi understand/, /^continue\b/, /^yes\b/,
     /akzeptier/, /zustimm/, /einverstanden/, /erlauben/, /zulassen/, /^weiter\b/,
@@ -176,7 +182,7 @@
   ];
 
   g.CCR_RULES = {
-    BTN_REJECT, BTN_SAVE, WORD_ALL, BTN_PAY, PAY_NEGATED, PAY_METHOD, TXT_CHECKOUT, BTN_ACCEPT, BTN_SETTINGS, BTN_CLOSE, BTN_OBJECT_ALL,
+    BTN_REJECT, BTN_SAVE, BTN_NOT_CONSENT, WORD_ALL, BTN_PAY, PAY_NEGATED, PAY_METHOD, TXT_CHECKOUT, BTN_ACCEPT, BTN_SETTINGS, BTN_CLOSE, BTN_OBJECT_ALL,
     TXT_STRONG, TXT_WEAK, TXT_PAY, CAT, CAT_ORDER, TOGGLE_SKIP, CMPS
   };
 })(globalThis);

@@ -14,6 +14,7 @@ const METHOD_LABEL = {
   reject: 'Odrzucono zgody',
   api: 'Ustawiono zgody (API CMP)',
   hidden: 'Ukryto baner informacyjny',
+  closed: 'Zamknięto okienko bez zgody',
   'info-accept': 'Zamknięto baner informacyjny',
   'wall-accept': 'Zaakceptowano (Twoja decyzja)',
   'wall-decline': 'Odmówiono (Twoja decyzja)'

@@ -10,14 +10,19 @@
     /(akceptuj|zaakceptuj|zezwol na|zgoda na|uzywaj|potwierdz\w*|zapisz) (tylko |wylacznie |jedynie )?(niezbedne|wymagane|konieczne|podstawowe)/,
     /kontynuuj bez/, /przejdz dalej bez/, /bez (akceptacji|zgody)/,
     /\breject/, /\bdeclin/, /\bdeny\b/, /\brefuse/, /\bdisagree/, /do not (accept|agree|consent)/, /don'?t (accept|agree|consent)/,
-    /(only|just|accept|use|allow) (strictly )?(necessary|essential|required)/, /(necessary|essential|required)( cookies)? only/,
+    /(only|just|accept|use|allow) (strictly )?(necessary|essential|required)/, /(accept|allow|use) (only|just) (the )?(strictly )?(necessary|essential|required)/, /(necessary|essential|required)( cookies)? only/,
     /continue without/, /\bopt.?out\b/, /\bno,? thanks\b/,
     /ablehn/, /nicht (zustimmen|akzeptieren|einverstanden)/, /nur (notwendig|essenziell|erforderlich|technisch)/, /ohne (zustimmung|einwilligung)/, /verweiger/,
     /\brefuser/, /\btout refuser/, /continuer sans/, /je refuse/, /seulement (les )?(necessaires|essentiels)/,
     /\brechaz/, /\bdenegar/, /solo (las )?(necesarias|esenciales)/, /continuar sin/,
     /\brifiut/, /\bnega\b/, /solo (i )?(necessari|essenziali|tecnici)/, /continua senza/,
     /\bweiger/, /\bafwijzen/, /alleen (noodzakelijk|essentieel|functioneel)/,
-    /\bodmitn/, /pouze nezbytn/, /\bnesouhlas/
+    /\bodmitn/, /pouze nezbytn/, /\bnesouhlas/,
+    // nordyckie, PT, HU, RO, SK
+    /\bafvis/, /\bavvisa/, /\bavvis\b/, /\bavvis alle/, /\bhylkaa/, /(kun|bare|bara|endast|kun de) n.dv.ndig/, /vain valttamatt/,
+    /\brejeitar/, /\brecusar/, /apenas (os )?(necessarios|essenciais)/, /\belutasit/, /csak a szukseges/, /\brespinge/, /\bodmietnut/, /iba nevyhnutn/,
+    // „odznacz wszystko” (np. Evidon: przycisk odmowy w panelu)
+    /odznacz wszystk/, /tout decocher/, /\b(uncheck|deselect) all\b/, /alle abwahlen/
   ];
 
   const BTN_SAVE = [
@@ -27,8 +32,10 @@
     /enregistr/, /\bvalider/, /\bconfirmer/,
     /\bguardar/, /\bconfirmar/,
     /\bsalva/, /\bconferm/,
-    /\bopslaan/, /\bbevestig/,
-    /\bulozit/, /\bpotvrdit/
+    /\bopslaan/, /\bbevestig/, /accepteer (selectie|geselecteerd|mijn keuze)/,
+    /\bulozit/, /\bpotvrdit/,
+    /accepter (la |ma )?selection/, /(tillad|tillat|salli) (valgte|valda|valitut)/, /hyvaksy valitut/, /aceptar (la )?seleccion/, /accetta (la )?selezione/,
+    /\bspara\b/, /\bgem\b/, /\blagre\b/, /\btallenna/, /\bguardar/, /\bgravar\b/, /\bmentes/
   ];
 
   // „Zapisz się” (newsletter), „Zarejestruj”, „Subscribe” — to nie jest zapis ustawień zgód
@@ -81,7 +88,8 @@
     /\bacept/, /de acuerdo/, /\bpermitir/,
     /\baccett/, /\bconsenti/, /\bacconsent/,
     /\bakkoord/, /accepteer/, /toestaan/,
-    /\bsouhlas/, /\bprijmout/, /\bpovolit/
+    /\bsouhlas/, /\bprijmout/, /\bpovolit/,
+    /\bhyvaksy/, /\bgodta/, /\btillat/, /\btillad/, /\baceitar/, /\belfogad/
   ];
 
   const BTN_SETTINGS = [
@@ -92,10 +100,15 @@
     /configurar/, /personalizar/, /\bgestion/, /mas opciones/,
     /gestisci/, /impostazion/, /personalizz/, /piu opzioni/,
     /instelling/, /\baanpass/, /\bbeheer/,
-    /nastaven/, /\bupravit/, /podrobnost/
+    /nastaven/, /\bupravit/, /podrobnost/,
+    /ustaw (swoje |moje )?wybory/, /auswahl treffen/, /\badjust\b/, /faire (vos|mes) choix/, /(set|make) (your )?choices/,
+    /installningar/, /indstillinger/, /innstillinger/, /asetukset/, /\bdetaljer\b/, /\btilpas/, /\banpassa/, /pr.ferencer/, /\bpreferenser/,
+    /\bmais opcoes/, /\bdefinicoes/, /\bpreferencias/,
+    // zakładki „Cele” w okienkach TCF bez przycisku ustawień (np. Admiral) — tylko dokładna etykieta
+    /^(cele|purposes|zwecke|finalites|finalidades|finalita|doelen|ucely)$/
   ];
 
-  const BTN_CLOSE = /^(x|×|✕|✖|zamknij|close|schliessen|fermer|cerrar|chiudi|sluiten|zavrit)$/;
+  const BTN_CLOSE = /^(x|×|✕|✖|zamknij|close|schliessen|fermer|cerrar|chiudi|sluiten|zavrit|dismiss|luk|stang|sulje)$/;
 
   // „Sprzeciw wobec wszystkich” w sekcjach uzasadnionego interesu
   const BTN_OBJECT_ALL = [
@@ -123,14 +136,24 @@
   // ---------- klasyfikacja kategorii (etykiety przełączników) ----------
   const CAT = {
     legitimateInterest: [/uzasadnion/, /legitimate interest/, /\blegit\.? interest/, /berechtigt/, /interet legitime/, /interes legitimo/, /legittimo interesse/, /interesse legittimo/, /gerechtvaardigd belang/, /opravneny zajem/],
-    necessary: [/niezbedn/, /\bkoniecz/, /\bwymagan/, /scisle/, /techniczn/, /podstawow/, /\bnecessary/, /\bessential/, /\bstrictly/, /\brequired/, /\btechnical/, /notwendig/, /erforderlich/, /essenziell/, /technisch/, /necessaire/, /essentiel/, /necesari/, /esencial/, /tecnic/, /necessari/, /essenzial/, /noodzakelijk/, /essentieel/, /nezbytn/, /\bnutn/],
-    marketing: [/marketing/, /reklam/, /advertis/, /\bads?\b/, /targeting/, /targetow/, /ukierunkow/, /werbung/, /\bwerbe/, /publicit/, /publicidad/, /pubblicit/, /advertentie/, /reclame/, /retarget/, /remarketing/, /\bad (selection|measurement|profile)/],
+    necessary: [/niezbedn/, /n.dv.ndig/, /valttamatt/, /\bkoniecz/, /\bwymagan/, /scisle/, /techniczn/, /podstawow/, /\bnecessary/, /\bessential/, /\bstrictly/, /\brequired/, /\btechnical/, /notwendig/, /erforderlich/, /essenziell/, /technisch/, /necessaire/, /essentiel/, /necesari/, /esencial/, /tecnic/, /necessari/, /essenzial/, /noodzakelijk/, /essentieel/, /nezbytn/, /\bnutn/],
+    marketing: [/marketing/, /markedsf/, /marknadsf/, /markkinoin/, /reklam/, /advertis/, /\bads?\b/, /targeting/, /targetow/, /ukierunkow/, /werbung/, /\bwerbe/, /publicit/, /publicidad/, /pubblicit/, /advertentie/, /reclame/, /retarget/, /remarketing/, /\bad (selection|measurement|profile)/],
     analytics: [/analit/, /analyt/, /statyst/, /statist/, /wydajnos/, /\bpomiar/, /mierzen/, /\bperformance/, /\bmeasure/, /audience/, /leistung/, /\bmessung/, /\bmesure/, /rendimiento/, /medicion/, /prestazion/, /misurazion/, /prestaties/, /\bmeten\b/, /\bvykon/, /\bmereni/],
     social: [/spolecznosc/, /social/, /soziale/, /sociaux/, /sociales/, /sociali/],
     personalization: [/personaliz/, /personalis/, /spersonaliz/, /\bprofil/, /dopasowan/, /content profile/],
     functional: [/funkcjonal/, /funkcj/, /preferenc/, /funcional/, /functional/, /functionality/, /preference/, /funktional/, /funktion/, /praferenz/, /komfort/, /fonctionnel/, /funzional/, /preferenz/, /functioneel/, /voorkeur/, /funkcni/],
     thirdParty: [/partner/, /dostawc/, /vendor/, /third.?part/, /stron trzecich/, /podmiot\w* trzeci/, /dritt/, /\btiers\b/, /tercer/, /terze parti/, /derden/, /tretich stran/]
   };
+  // Cele i funkcje specjalne TCF (IAB) — sprawdzane przed CAT, bo ich nazwy mylą ogólne słowniki:
+  // „Funkcje specjalne” (geolokalizacja, skanowanie urządzenia) to NIE są cookies funkcjonalne,
+  // a „Przechowywanie informacji na urządzeniu” (cel 1) dotyczy dostawców, nie działania strony.
+  const TCF_CAT = [
+    [/geolokaliz|geolocali[sz]|standortdaten|geolocalizaci|geolocalizzazion|geolocatie|precise location/, 'marketing'],
+    [/skanowani\w* (aktywn\w* )?(charakterystyk|urzadzen)|aktywn\w* skanowani|aktywnie zadanych|actively scan|scan(ning)? (the )?device|endgerateeigenschaften|geraeteeigenschaften|analyser activement|analizar activamente|scansione attiva|actief scannen/, 'marketing'],
+    [/funkcje specjaln|special features?\b|besondere merkmale|fonctionnalites speciales|caracteristicas especiales|funzionalita speciali|speciale (functies|kenmerken)|zvlastni funkce/, 'marketing'],
+    [/przechowywanie (informacji )?na urzadzeniu|informacji na urzadzeniu lub dostep|store and\/or access information|speichern von (und\/)?oder zugriff auf informationen|zugriff auf informationen auf (einem|ihrem) endgerat|stocker (et\/ou acceder a )?des informations|almacenar (la )?informacion en un dispositivo|archiviare e\/o accedere|informatie op een apparaat (op)?slaan|ukladani informaci/, 'thirdParty']
+  ];
+
   // kolejność sprawdzania (pierwsze dopasowanie wygrywa)
   const CAT_ORDER = ['legitimateInterest', 'necessary', 'marketing', 'analytics', 'social', 'personalization', 'functional', 'thirdParty'];
 
@@ -156,12 +179,16 @@
       reject: '#didomi-notice-disagree-button, .didomi-continue-without-agreeing, [aria-label*="disagree" i]',
       settings: '#didomi-notice-learn-more-button', save: '.didomi-consent-popup-actions .didomi-button-highlight, [aria-label*="save" i]',
       accept: '#didomi-notice-agree-button' },
-    { name: 'Quantcast', detect: '.qc-cmp2-container, #qc-cmp2-container', panel: '.qc-cmp2-container' },
+    // InMobi Choice (dawniej Quantcast): „Odrzucenie” w drugiej warstwie tylko przestawia przełączniki — potem „Zapisz i wyjdź”
+    { name: 'Quantcast', detect: '#qc-cmp2-ui, .qc-cmp2-container, #qc-cmp2-container', panel: '#qc-cmp2-ui',
+      reject: '#disagree-btn', settings: '#more-options-btn' },
     { name: 'Google FC', detect: '.fc-consent-root', panel: '.fc-consent-root',
       reject: '.fc-cta-do-not-consent', settings: '.fc-cta-manage-options', save: '.fc-confirm-choices', accept: '.fc-cta-consent' },
-    { name: 'TrustArc', detect: '#truste-consent-track, .truste_box_overlay', reject: '#truste-consent-required', settings: '#truste-show-consent', accept: '#truste-consent-button' },
+    // .truste_box_overlay to tylko opakowanie ramki centrum preferencji — obsługuje ją skrypt w ramce
+    { name: 'TrustArc', detect: '#truste-consent-track', reject: '#truste-consent-required', settings: '#truste-show-consent', accept: '#truste-consent-button' },
     { name: 'CookieYes', detect: '.cky-consent-container, .cky-modal', panel: '.cky-preference-center, .cky-modal',
-      reject: '.cky-btn-reject', settings: '.cky-btn-customize', save: '.cky-btn-preferences', accept: '.cky-btn-accept' },
+      reject: '.cky-btn-reject, [data-cky-tag="reject-button"]', settings: '.cky-btn-customize, [data-cky-tag="settings-button"]',
+      save: '.cky-btn-preferences, [data-cky-tag="detail-save-button"]', accept: '.cky-btn-accept, [data-cky-tag="accept-button"]' },
     { name: 'Complianz', detect: '.cmplz-cookiebanner:not(.cmplz-hidden)', reject: '.cmplz-deny', settings: '.cmplz-view-preferences',
       save: '.cmplz-save-preferences', accept: '.cmplz-accept' },
     { name: 'Klaro', detect: '.klaro .cookie-notice, .klaro .cookie-modal', panel: '.klaro .cookie-modal',
@@ -174,15 +201,33 @@
       save: '.cmpboxbtnsave, .cmpboxbtnyescustomchoices, .cmptxt_btn_save',
       accept: '.cmpboxbtnyes:not(.cmpboxbtnyescustomchoices):not(.cmptxt_btn_save)' },
     { name: 'Borlabs', detect: '#BorlabsCookieBox ._brlbs-block-content, #BorlabsCookieBox .brlbs-cmpnt-dialog', reject: '._brlbs-refuse-btn a, ._brlbs-refuse a, [data-cookie-refuse]', settings: '[data-cookie-individual]' },
-    { name: 'Axeptio', detect: '#axeptio_overlay .axeptio_widget, #axeptio_main_button', reject: '#axeptio_btn_dismiss', settings: '#axeptio_btn_configure', accept: '#axeptio_btn_acceptAll' },
+    { name: 'Axeptio', detect: '#axeptio_overlay .axeptio_widget', reject: '#axeptio_btn_dismiss', settings: '#axeptio_btn_configure', accept: '#axeptio_btn_acceptAll' },
     { name: 'CookieFirst', detect: '.cookiefirst-root', reject: '[data-cookiefirst-action="reject"]', settings: '[data-cookiefirst-action="adjust"]', save: '[data-cookiefirst-action="save"]', accept: '[data-cookiefirst-action="accept"]' },
     { name: 'Cookie Script', detect: '#cookiescript_injected', reject: '#cookiescript_reject', settings: '#cookiescript_manage', save: '#cookiescript_save', accept: '#cookiescript_accept' },
     { name: 'Termly', detect: '[class^="termly-styles-root"]' },
-    { name: 'Sourcepoint', detect: '.message-container[data-sp-message], #sp_message_container_body, .sp_message_container' }
+    // Sourcepoint: okienko i menedżer prywatności w ramce; typ wyboru w klasie przycisku (9 = subskrypcja, 11 = akceptuj, 12 = ustawienia, 13 = odrzuć)
+    { name: 'Sourcepoint', detect: '.message-container[data-sp-message], #sp_message_container_body, .sp_message_container, .message-container:has([class*="sp_choice_type_"]), #privacy-manager.message-container',
+      panel: '#privacy-manager.message-container',
+      reject: '.sp_choice_type_13, .sp_choice_type_REJECT_ALL', settings: '.sp_choice_type_12', save: '.sp_choice_type_SAVE_AND_EXIT, .sp_choice_type_SE',
+      accept: '.sp_choice_type_11, .sp_choice_type_ACCEPT_ALL', pay: '.sp_choice_type_9' },
+    { name: 'Cookie Information', detect: '#coiOverlay, #ccb-coiOverlay, #coiConsentBanner', reject: '.coi-banner__decline, #declineButton', save: '#updateButton', accept: '.coi-banner__accept' },
+    { name: 'Piwik PRO', detect: '[id^="ppms_cm_consent_popup"], #ppms_cm_popup_overlay', reject: '.ppms_cm_reject-all, #ppms_cm_reject-all', save: '#ppms_cm_save-choices, .ppms_cm_save-choices', accept: '.ppms_cm_agree-to-all, #ppms_cm_agree-to-all' },
+    { name: 'Evidon', detect: '#_evidon-barrier-wrapper, #_evidon_banner, #evidon-prefdiag-overlay', panel: '#evidon-prefdiag-overlay',
+      reject: '#_evidon-decline-button, .evidon-prefdiag-declinebtn, .evidon-barrier-declinebutton', settings: '#_evidon-banner-cookiebutton, .evidon-barrier-cookiebutton',
+      accept: '#_evidon-accept-button, .evidon-prefdiag-acceptbtn, .evidon-barrier-acceptbutton' },
+    { name: 'Silktide', detect: '#silktide-wrapper', reject: '#silktide-wrapper .reject-all, #silktide-wrapper .preferences-reject-all', settings: '#silktide-wrapper button.preferences', accept: '#silktide-wrapper .accept-all' },
+    { name: 'Civic', detect: '#ccc-notify, #ccc-module, #ccc-overlay', panel: '#ccc-module', reject: '.ccc-reject-button, #ccc-reject-settings', accept: '.ccc-accept-button, #ccc-recommended-settings, #ccc-notify-accept' },
+    { name: 'Moove GDPR', detect: '#moove_gdpr_cookie_info_bar:not(.moove-gdpr-info-bar-hidden), #moove_gdpr_cookie_modal.gdpr_lightbox-hide-not', panel: '#moove_gdpr_cookie_modal',
+      reject: '.moove-gdpr-infobar-reject-btn', settings: '.change-settings-button', save: '.moove-gdpr-modal-save-settings', accept: '.moove-gdpr-infobar-allow-all' },
+    { name: 'Sirdata', detect: '#sd-cmp [role="dialog"], #sd-cmp-dialog-main' },
+    { name: 'Clickio', detect: '#cl-consent .cl-consent-popup, #cl-consent.cl-consent-visible', reject: '[data-role="b_disagree"]', settings: '[data-role="b_options"]', save: '[data-role="b_save"]', accept: '[data-role="b_agree"]' },
+    { name: 'Ezoic', detect: '#ez-cookie-dialog-wrapper', settings: '#ez-manage-settings', save: '#ez-save-settings', accept: '#ez-accept-all' },
+    { name: 'Enzuzo', detect: '#ez-cookie-notification', reject: '#ez-cookie-notification__decline', accept: '#ez-cookie-notification__accept' },
+    { name: 'Ketch', detect: '#lanyard_root div[role="dialog"], #ketch-banner, #ketch-modal', reject: '#ketch-banner-button-tertiary, button[aria-label^="Reject" i]', settings: '#ketch-banner-button-secondary' }
   ];
 
   g.CCR_RULES = {
     BTN_REJECT, BTN_SAVE, BTN_NOT_CONSENT, WORD_ALL, BTN_PAY, PAY_NEGATED, PAY_METHOD, TXT_CHECKOUT, BTN_ACCEPT, BTN_SETTINGS, BTN_CLOSE, BTN_OBJECT_ALL,
-    TXT_STRONG, TXT_WEAK, TXT_PAY, CAT, CAT_ORDER, TOGGLE_SKIP, CMPS
+    TXT_STRONG, TXT_WEAK, TXT_PAY, CAT, TCF_CAT, CAT_ORDER, TOGGLE_SKIP, CMPS
   };
 })(globalThis);

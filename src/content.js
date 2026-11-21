@@ -22,6 +22,7 @@
   let aborted = false;            // obsługa przerwana po przekroczeniu czasu — nic więcej nie klikamy
   let wallAsked = false;
   let reported = false;
+  let handledOK = false; // na tej stronie (ramce) obsłużyliśmy już okienko
   let unrecognizedChecks = 0;
   let startedAt = Date.now();
   let observer = null;
@@ -189,6 +190,8 @@
     return norm(t);
   }
 
+  const POLICY_RE = /polityk|policy|politique|richtlinie|datenschutzerklarung|informativa|przeczytasz|read (our|more about)/;
+
   function classifyButton(t) {
     if (!t || t.length > 90) return null;
     // płatność ma pierwszeństwo: "Nadal odrzucam, chcę zapłacić" to NIE jest zwykłe "Odrzuć"
@@ -199,7 +202,8 @@
     const acc = any(t, R.BTN_ACCEPT);
     const all = any(t, R.WORD_ALL);
     if (any(t, R.BTN_SAVE) && !(acc && all)) return 'save';
-    if (any(t, R.BTN_SETTINGS) && !(acc && all)) return 'settings';
+    // „Ustawienia” to krótka etykieta; zdanie w rodzaju „Więcej o plikach cookies przeczytasz w polityce prywatności” to link do polityki
+    if (any(t, R.BTN_SETTINGS) && !(acc && all) && t.length <= 60 && !POLICY_RE.test(t)) return 'settings';
     if (acc) return 'accept';
     if (R.BTN_CLOSE.test(t)) return 'close';
     return null;
@@ -265,9 +269,11 @@
       if (c && vis(el)) b[c].push(el); // widoczność tylko dla rozpoznanych (kosztowna przy setkach elementów)
     }
     if (cmp) {
-      for (const k of ['reject', 'settings', 'save', 'accept']) {
+      for (const k of ['pay', 'reject', 'settings', 'save', 'accept']) {
         if (!cmp[k]) continue;
-        const known = deepQueryAll(document, cmp[k]).filter(vis);
+        let known = deepQueryAll(document, cmp[k]).filter(vis);
+        // selektor CMP nie wygrywa z treścią: „Rifiuta e abbonati” (iubenda) to subskrypcja, nie odrzucenie
+        if (k !== 'pay') known = known.filter(e => classifyButton(labelOf(e)) !== 'pay');
         if (known.length) {
           for (const kk of Object.keys(b)) b[kk] = b[kk].filter(e => !known.includes(e));
           b[k] = [...known, ...b[k]];
@@ -298,7 +304,12 @@
       if (els.filter(Boolean).every(e => !isShown(e))) return true;
       await sleep(50);
     }
-    return false;
+    // kontener został (np. Silktide trzyma opakowanie z ikonką „cookies”), ale nie ma w nim już żadnej decyzji do podjęcia
+    return els.filter(Boolean).every(e => {
+      if (!isShown(e)) return true;
+      const b = analyze(e, null);
+      return !b.reject.length && !b.accept.length && !b.save.length;
+    });
   }
 
   async function waitFor(fn, ms = 4000, step = 80) {
@@ -410,7 +421,9 @@
     try {
       for (const m of mutations) {
         if (m.type === 'childList') m.addedNodes.forEach(check);
-        else if (m.type === 'attributes' && m.target.nodeType === 1 && m.target.matches(sel)) { conceal(m.target); hit = true; }
+        // tylko class/hidden/aria-hidden: zmiany `style` robimy też sami (clip-path przy ukrywaniu i odkrywaniu) —
+        // reagowanie na nie ukrywało okienka w kółko, także to oddane użytkownikowi po nieudanej obsłudze
+        else if (m.type === 'attributes' && m.attributeName !== 'style' && m.target.nodeType === 1 && m.target.matches(sel)) { conceal(m.target); hit = true; }
       }
     } catch (e) { /* ignore */ }
     if (hit && !busy) {
@@ -490,6 +503,7 @@
 
   function classifyText(t) {
     if (!t) return null;
+    for (const [re, k] of R.TCF_CAT) if (re.test(t)) return k;
     for (const k of R.CAT_ORDER) if (any(t, R.CAT[k])) return k;
     return null;
   }
@@ -810,10 +824,30 @@
     return norm(parts.join(' '));
   }
 
-  /** Czy element mówi o cookies własnym tekstem (a nie tylko etykietami linków/przycisków). */
+  /** Czy element mówi o cookies/zgodzie własnym tekstem (a nie tylko etykietami linków/przycisków). */
   function talksAboutCookies(el) {
     if (el.shadowRoot || el.querySelector('iframe')) return true; // treść w Shadow DOM / ramce — nie rozbieramy
-    return any(proseText(el), R.TXT_STRONG);
+    const p = proseText(el);
+    return any(p, R.TXT_STRONG) || consentEvidence(p); // np. „My i 1180 zaufanych partnerów… Twoja zgoda” bez słowa cookie
+  }
+
+  /**
+   * Czy kandydat z heurystyki to okienko decyzji. Sam przycisk „Ustawienia cookies” (pływający przycisk ponownego
+   * otwarcia, który strony pokazują PO obsłudze) albo „Zamknij” to okienko tylko wtedy, gdy obok jest tekst o cookies.
+   */
+  function bannerWorthy(el, b) {
+    if (b.reject.length || b.accept.length || b.save.length) return true;
+    if (!b.settings.length && !b.close.length) return false;
+    if (handledOK) return false; // po udanej obsłudze strony pokazują pływający przycisk „Ustawienia cookies” — to nie nowe okienko
+    const r = el.getBoundingClientRect();
+    if (r.width * r.height < 0.02 * innerWidth * innerHeight) return false; // mała ikonka/przycisk w rogu
+    const p = el.shadowRoot ? norm(deepText(el)) : proseText(el);
+    return p.length >= 40 && (any(p, R.TXT_STRONG) || consentEvidence(p));
+  }
+
+  /** Widoczne pole do wpisywania (formularz logowania, newsletter, kod pocztowy) — okienko zgody go nie ma. */
+  function hasTextInput(el) {
+    try { return [...el.querySelectorAll(FORM_INPUT_SEL)].some(i => i.type !== 'hidden' && isVisible(i)); } catch (e) { return false; }
   }
 
   function findBanners() {
@@ -848,7 +882,10 @@
       if (!floating && !staticOk) continue;
       if (isPageShell(el)) continue;
       if ((!floating || text.length > 600) && !talksAboutCookies(el)) continue;
-      if (!hasButtons(analyze(el))) continue;
+      if (hasTextInput(el)) continue;
+      const b = analyze(el);
+      if (!hasButtons(b) && !b.close.length) continue;
+      if (!bannerWorthy(el, b)) continue;
       good.push(el);
     }
     // zostaw najbardziej zewnętrzne
@@ -883,8 +920,12 @@
     // to też panel (nie czekamy na przełączniki do końca limitu, „Odrzuć wszystkie” w nim zadziała)
     for (const c of shown) {
       if (c === root || containsDeep(c, root) || containsDeep(root, c)) continue;
-      const b = analyze(c, cmp);
-      if (b.save.length || b.reject.length) return c;
+      // bez selektorów CMP (szukają w całym dokumencie — każde okienko „miałoby” wtedy ich „Odrzuć”)
+      // i tylko okno mówiące o cookies/zgodzie (nie np. arkusz z promocją, który akurat jest dialogiem)
+      if (!(cmp && cmp.panel && c.matches && c.matches(cmp.panel)) && cookieScore(norm(deepText(c))) < 3) continue;
+      const b = analyze(c, null);
+      const known = cmp ? ['save', 'reject'].some(k => cmp[k] && deepQueryAll(c, cmp[k]).some(isVisible)) : false;
+      if (b.save.length || b.reject.length || known) return c;
     }
     return null;
   }
@@ -913,6 +954,7 @@
   }
 
   function report(method, cmp, extra = {}) {
+    handledOK = true;
     log('handled', method, cmp && cmp.name, extra);
     send({ type: 'handled', method, cmp: cmp ? cmp.name : 'heurystyka', frameHost: location.hostname, ...extra });
   }
@@ -1059,8 +1101,17 @@
     if (inRoot.length && b.save.length) {
       panel = root;
     } else if (b.settings.length) {
+      const before = norm(deepText(root)).slice(0, 2000);
+      const tClick = Date.now();
       await click(b.settings[0]);
-      panel = await waitFor(() => findPanel(root, cmp), 4000);
+      // ustawienia w tym samym okienku, bez przełączników (np. InMobi: lista celów, „Odrzucenie” + „Zapisz i wyjdź”) —
+      // to też panel; nie czekamy na osobne okno do końca limitu
+      const sameRoot = () => {
+        if (Date.now() - tClick < 1200 || !isShown(root) || norm(deepText(root)).slice(0, 2000) === before) return null;
+        const x = analyze(root, null);
+        return (x.save.length || x.reject.length) ? root : null;
+      };
+      panel = await waitFor(() => findPanel(root, cmp) || sameRoot(), 4000);
       if (panel) concealBanner(panel);
       if (!panel) {
         log('granular: brak panelu z przełącznikami');
@@ -1131,6 +1182,14 @@
         if (!IS_TOP) report('reject', cmp);
         await click(b.reject[0]);
         if (await waitGone([root, panel], 3000)) { if (IS_TOP) report('reject', cmp); return true; }
+        // „Odrzuć wszystkie” w panelu bywa tylko przestawieniem przełączników (np. InMobi „Odrzucenie”) — potem „Zapisz”
+        if (isShown(scope)) {
+          const save = analyze(scope, cmp).save.find(e => !isDisabled(e));
+          if (save) {
+            await click(save);
+            if (await waitGone([root, panel], 3000)) { if (IS_TOP) report('reject', cmp); return true; }
+          }
+        }
       }
     }
     return false;
@@ -1168,6 +1227,12 @@
     if (await tryApi(root, cmp, prefs)) return;
 
     let b = analyze(root, cmp);
+    if (!hasButtons(b)) {
+      // okienko dopiero wjeżdża (animacja przezroczystości) — chwila na przyciski, potem bez wymogu nieprzezroczystości
+      await waitFor(() => hasButtons(analyze(root, cmp)), 1500);
+      b = analyze(root, cmp);
+      if (!hasButtons(b)) b = analyze(root, cmp, true);
+    }
     let panel = null;
 
     // 1) wszystko poza niezbędnymi wyłączone → najprościej "Odrzuć wszystkie"
@@ -1206,6 +1271,17 @@
     if (onPaymentHost() || looksLikePayment(scope, text) || (!cmp && !consentEvidence(text))) {
       log('to nie okienko zgody (płatność / brak mowy o cookies) — zostawiam');
       return 'left';
+    }
+    // Brak odrzucenia, ale jest „Zamknij”/„×”: zamknięcie nie jest zgodą (opcjonalne cookies zostają wyłączone),
+    // więc to lepsze niż pytanie o akceptację czy zgłoszenie. Ściany płatności („zgoda albo płać”) — bez zmian.
+    if (!b.reject.length && !b.pay.length && !any(text, R.TXT_PAY)) {
+      const x = b.close[0] || closeButtonOf(scope);
+      if (x) {
+        concealBanner(scope);
+        await click(x);
+        if (await waitGone([root, panel], 2000)) { report('closed', cmp); return; }
+        reveal();
+      }
     }
     if (!b.accept.length) {
       log('brak przycisków do obsłużenia');
@@ -1265,6 +1341,8 @@
   async function checkStillShown(root, cmp, result) {
     await sleep(1500);
     if (!root.isConnected || !isShown(root)) return;
+    const b = analyze(root, null);
+    if (!b.reject.length && !b.accept.length && !b.save.length) return; // zostało opakowanie / ikonka ponownego otwarcia
     log('okienko nadal widoczne po obsłudze', result);
     offerReport(root, null, cmp, 'reject-failed');
   }

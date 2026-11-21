@@ -112,7 +112,7 @@
 
   // „Sprzeciw wobec wszystkich” w sekcjach uzasadnionego interesu
   const BTN_OBJECT_ALL = [
-    /sprzeciw/, /\bobject\b/, /object (to )?all/, /widerspr/, /\bopposer/, /\bs'opposer/, /\boponer/, /oposicion/, /\bopporsi/, /opposizione/, /bezwaar/, /\bnamitk/
+    /sprzeciw/, /\bobjetar/, /\bopor-se\b/, /\boposicao/, /\bobject\b/, /object (to )?all/, /widerspr/, /\bopposer/, /\bs'opposer/, /\boponer/, /oposicion/, /\bopporsi/, /opposizione/, /bezwaar/, /\bnamitk/
   ];
 
   // ---------- tekst banera ----------
@@ -135,7 +135,7 @@
 
   // ---------- klasyfikacja kategorii (etykiety przełączników) ----------
   const CAT = {
-    legitimateInterest: [/uzasadnion/, /legitimate interest/, /\blegit\.? interest/, /berechtigt/, /interet legitime/, /interes legitimo/, /legittimo interesse/, /interesse legittimo/, /gerechtvaardigd belang/, /opravneny zajem/],
+    legitimateInterest: [/uzasadnion/, /interesses? legitimos?/, /legitimt interess/, /oikeutettu etu/, /legitimate interest/, /\blegit\.? interest/, /berechtigt/, /interet legitime/, /interes legitimo/, /legittimo interesse/, /interesse legittimo/, /gerechtvaardigd belang/, /opravneny zajem/],
     necessary: [/niezbedn/, /n.dv.ndig/, /valttamatt/, /\bkoniecz/, /\bwymagan/, /scisle/, /techniczn/, /podstawow/, /\bnecessary/, /\bessential/, /\bstrictly/, /\brequired/, /\btechnical/, /notwendig/, /erforderlich/, /essenziell/, /technisch/, /necessaire/, /essentiel/, /necesari/, /esencial/, /tecnic/, /necessari/, /essenzial/, /noodzakelijk/, /essentieel/, /nezbytn/, /\bnutn/],
     marketing: [/marketing/, /markedsf/, /marknadsf/, /markkinoin/, /reklam/, /advertis/, /\bads?\b/, /targeting/, /targetow/, /ukierunkow/, /werbung/, /\bwerbe/, /publicit/, /publicidad/, /pubblicit/, /advertentie/, /reclame/, /retarget/, /remarketing/, /\bad (selection|measurement|profile)/],
     analytics: [/analit/, /analyt/, /statyst/, /statist/, /wydajnos/, /\bpomiar/, /mierzen/, /\bperformance/, /\bmeasure/, /audience/, /leistung/, /\bmessung/, /\bmesure/, /rendimiento/, /medicion/, /prestazion/, /misurazion/, /prestaties/, /\bmeten\b/, /\bvykon/, /\bmereni/],
@@ -167,7 +167,9 @@
   const CMPS = [
     { name: 'OneTrust', detect: '#onetrust-banner-sdk, #onetrust-pc-sdk', panel: '#onetrust-pc-sdk',
       reject: '#onetrust-reject-all-handler, .ot-pc-refuse-all-handler', settings: '#onetrust-pc-btn-handler',
-      save: '.save-preference-btn-handler', accept: '#onetrust-accept-btn-handler' },
+      save: '.save-preference-btn-handler', accept: '#onetrust-accept-btn-handler',
+      // sprzeciw wobec uzasadnionego interesu przy każdym celu (przyciski w zwiniętych sekcjach — klikane także ukryte)
+      objectLI: '#onetrust-pc-sdk .ot-obj-leg-btn-handler.ot-leg-int-enabled' },
     { name: 'Cookiebot', detect: '#CybotCookiebotDialog', api: 'cookiebot', panel: '#CybotCookiebotDialog',
       reject: '#CybotCookiebotDialogBodyButtonDecline', settings: '#CybotCookiebotDialogBodyLevelButtonCustomize, #CybotCookiebotDialogNavDetails',
       save: '#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowallSelection, #CybotCookiebotDialogBodyButtonAcceptSelected',

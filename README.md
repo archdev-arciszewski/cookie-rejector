@@ -41,6 +41,8 @@ Dla każdego wykrytego banera (także w iframe'ach i Shadow DOM):
    - przełączniki doklejane przez stronę chwilę po otwarciu panelu też są ustawiane.
 3. **Plan B** — „Odrzuć wszystkie” (na banerze albo w panelu ustawień). Jeśli wszystkie kategorie opcjonalne masz wyłączone, wtyczka od razu klika „Odrzuć”. Gdy „Odrzuć wszystkie” w panelu tylko przestawia przełączniki (np. InMobi „Odrzucenie”), wtyczka klika potem „Zapisz i wyjdź”.
    - Jeśli okienko nie ma odrzucenia, ale ma **„×” / „Zamknij”**, wtyczka je zamyka (zamknięcie nie jest zgodą) zamiast pytać o akceptację.
+**Sprawdzenie zapisu (IAB TCF)** — po obsłudze wtyczka odczytuje z `__tcfapi` strony, co naprawdę zostało zapisane (zgody na cele, uzasadniony interes, funkcje specjalne). Jeśli strona zostawiła **uzasadniony interes**, a Ty masz go wyłączonego, wtyczka otwiera ustawienia CMP jeszcze raz (oficjalnym wywołaniem: OneTrust, Didomi, consentmanager, InMobi — ukryte przed Tobą), zgłasza sprzeciw i zapisuje, po czym sprawdza ponownie. Wynik trafia do logu w ustawieniach, a gdy strona nadal coś zapisuje — dymek „Strona nadal zapisuje zgody (TCF)”. W OneTrust sprzeciw przy każdym celu jest zgłaszany już za pierwszym razem (przyciski w zwiniętych sekcjach).
+
 4. **Ściana „zgoda albo płać” / wymuszona akceptacja** — jeśli nie da się odrzucić, a na stronie jest subskrypcja/płatność (albo pełnoekranowa blokada z samym „Akceptuj”), wtyczka pokazuje **własne okienko z pytaniem**. „Tak” → klika akceptację na stronie. „Nie” → nic albo zamknięcie karty (do wyboru). Decyzję można zapamiętać dla domeny.
 5. **Banery informacyjne** (pasek z samym „OK”, nieblokujący) — domyślnie ukrywane bez wyrażania zgody.
 
@@ -137,6 +139,7 @@ Wynik dla 0.6.0 na 386 stronach (PL, DE, FR, UK, IT, nordyckie i inne; lista w `
 
 - To heurystyka — na nietypowych banerach może się pomylić. Włącz „Tryb debugowania” i patrz w konsolę (F12, prefiks `[CookieRejector]`), a stronę dodaj do wyłączonych, jeśli coś psuje.
 - Wtyczka nie usuwa ciasteczek już zapisanych ani nie blokuje requestów — ustawia tylko wybór w banerze.
+- Sprzeciw wobec uzasadnionego interesu nie wszędzie da się zgłosić automatycznie: CMP bez oficjalnego wywołania „pokaż ustawienia” (m.in. Sourcepoint, ZPR Media, UniConsent, Cookie Script w trybie TCF, Borlabs) i consentmanager zapisują go mimo odrzucenia. Wtyczka wykrywa to w TCF i pokazuje dymek „Strona nadal zapisuje zgody (TCF)”; wpis jest też w logu w ustawieniach.
 
 ## Wkład w projekt
 

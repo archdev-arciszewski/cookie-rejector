@@ -15,6 +15,8 @@ const METHOD_LABEL = {
   api: 'Ustawiono zgody (API CMP)',
   hidden: 'Ukryto baner informacyjny',
   closed: 'Zamknięto okienko bez zgody',
+  'tcf-ok': 'Sprawdzono zapis zgód (TCF)',
+  'tcf-left': 'Strona nadal zapisuje zgody (TCF)',
   'info-accept': 'Zamknięto baner informacyjny',
   'wall-accept': 'Zaakceptowano (Twoja decyzja)',
   'wall-decline': 'Odmówiono (Twoja decyzja)'
@@ -49,9 +51,23 @@ async function handle(msg, sender) {
 
     case 'handled': {
       const settings = await CCR.loadSettings();
+      // okienko obsłużyła ramka (np. Sourcepoint) — zapis zgód sprawdza ramka główna (tam jest __tcfapi strony)
+      if (sender.frameId && tabId != null) api.tabs.sendMessage(tabId, { type: 'verify-consent' }, { frameId: 0 }).catch(() => {});
       await bumpCount(tabId);
       await addLog({ host, frameHost: msg.frameHost, method: msg.method, cmp: msg.cmp, cats: msg.cats || null });
-      if (settings.notifications && tabId != null) toast(tabId, msg);
+      if (settings.notifications && tabId != null && !msg.quiet) toast(tabId, msg);
+      return { ok: true };
+    }
+
+    case 'verified': {
+      const settings = await CCR.loadSettings();
+      await addLog({ host, method: msg.ok ? 'tcf-ok' : 'tcf-left', cmp: msg.cmp || '', li: (msg.li || []).length, unwanted: (msg.unwanted || []).length + (msg.sf || []).length, retried: !!msg.retried });
+      if (!msg.ok && settings.notifications && tabId != null) {
+        const parts = [];
+        if ((msg.unwanted || []).length || (msg.sf || []).length) parts.push(`zgody: ${(msg.unwanted || []).length + (msg.sf || []).length}`);
+        if ((msg.li || []).length) parts.push(`uzasadniony interes: ${msg.li.length} cel.`);
+        toast(tabId, { method: 'tcf-left', cmp: msg.cmp || '', note: parts.join(', ') });
+      }
       return { ok: true };
     }
 
@@ -257,6 +273,7 @@ function toast(tabId, msg) {
     if (off.length) detail += ` ✗ ${off.join(', ')}`;
   }
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  if (msg.note) detail += (detail ? ' · ' : '') + msg.note;
   const html = `🍪 <b>${esc(label)}</b> · ${esc(msg.cmp || '')}${detail ? '<br>' + esc(detail) : ''}`;
   api.tabs.sendMessage(tabId, { type: 'toast', html }, { frameId: 0 }).catch(() => {});
 }

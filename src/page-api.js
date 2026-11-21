@@ -7,6 +7,54 @@
   window[TAG] = true;
 
   const handlers = {
+    // Stan zgód IAB TCF (tylko odczyt): które cele mają zgodę / uzasadniony interes, funkcje specjalne.
+    tcf() {
+      return new Promise(resolve => {
+        const api = window.__tcfapi;
+        if (typeof api !== 'function') return resolve({ ok: false, none: true });
+        const on = o => Object.entries(o || {}).filter(([, v]) => v === true).map(([k]) => +k);
+        const sum = d => ({
+          ok: true, cmpId: d.cmpId, gdprApplies: d.gdprApplies, eventStatus: d.eventStatus,
+          purposeConsents: on(d.purpose && d.purpose.consents), purposeLI: on(d.purpose && d.purpose.legitimateInterests),
+          vendorConsents: on(d.vendor && d.vendor.consents).length, vendorLI: on(d.vendor && d.vendor.legitimateInterests).length,
+          specialFeatures: on(d.specialFeatureOptins)
+        });
+        const timer = setTimeout(() => resolve({ ok: false, timeout: true }), 1500);
+        try {
+          api('getTCData', 2, (d, ok) => {
+            if (ok && d) { clearTimeout(timer); resolve(sum(d)); return; }
+            api('addEventListener', 2, (d2, ok2) => {
+              if (!ok2 || !d2) return;
+              clearTimeout(timer);
+              try { api('removeEventListener', 2, () => {}, d2.listenerId); } catch (e) { /* ignore */ }
+              resolve(sum(d2));
+            });
+          });
+        } catch (e) { clearTimeout(timer); resolve({ ok: false, error: String(e) }); }
+      });
+    },
+
+    // Ponowne otwarcie ustawień CMP (żeby zgłosić sprzeciw wobec uzasadnionego interesu, który został po zapisie).
+    // Tylko oficjalne wywołania „pokaż ustawienia” — nic nie jest tu akceptowane ani zapisywane.
+    reopen(p) {
+      const id = p && p.cmpId;
+      try {
+        if (window.OneTrust && typeof window.OneTrust.ToggleInfoDisplay === 'function' && (!id || id === 28)) {
+          window.OneTrust.ToggleInfoDisplay(); return { ok: true, via: 'onetrust' };
+        }
+        if (window.Didomi && window.Didomi.preferences && typeof window.Didomi.preferences.show === 'function' && (!id || id === 7)) {
+          window.Didomi.preferences.show(); return { ok: true, via: 'didomi' };
+        }
+        if (typeof window.__cmp === 'function' && (!id || id === 31)) {
+          window.__cmp('showScreenAdvanced'); return { ok: true, via: 'consentmanager' };
+        }
+        if (typeof window.__tcfapi === 'function' && id === 10) { // InMobi Choice
+          window.__tcfapi('displayConsentUi', 2, () => {}); return { ok: true, via: 'inmobi' };
+        }
+      } catch (e) { return { ok: false, error: String(e && e.message || e) }; }
+      return { ok: false };
+    },
+
     async cookiebot(p) {
       const cb = window.Cookiebot;
       if (!cb || typeof cb.submitCustomConsent !== 'function') return { ok: false };

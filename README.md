@@ -47,7 +47,11 @@ Dla każdego wykrytego banera (także w iframe'ach i Shadow DOM):
 - za przyciski uznaje też elementy, które tylko wyglądają na klikalne (kursor-łapka, krótki tekst), np. `div` z obsługą kliknięcia w JS,
 - rozpoznaje przełączniki rysowane samym CSS-em (tor + okrągła gałka, bez `input`/`role`) i odczytuje ich stan z położenia gałki,
 - panel ustawień otwarty jako osobne okno też jest obsługiwany (także gdy dopiero się pojawia z animacją),
-- czas, w którym strona sama blokuje przeglądarkę (np. renderuje ciężki panel), nie wlicza się do limitu obsługi.
+- czas, w którym strona sama blokuje przeglądarkę (np. renderuje ciężki panel), nie wlicza się do limitu obsługi; czas na Twoją odpowiedź w okienku z pytaniem też nie,
+- „Akceptuję wybrane” / „Potwierdzam wybór” to zapis ustawień, „Potwierdzam wymagane” to odrzucenie, a „Potwierdzam wszystkie” to akceptacja (wtyczka jej nie klika),
+- gdy wszystkie przełączniki są już ustawione zgodnie z Twoimi kategoriami, a strona trzyma „Zapisz” nieaktywne do pierwszej zmiany (np. Bing), wtyczka zamyka panel krzyżykiem,
+- treść strony, jej stopka i nawigacja nie są okienkiem zgody, nawet jeśli mają link „Polityka cookies” albo przycisk „Zarządzaj cookies” — okienko musi mówić o cookies własnym tekstem; wtyczka nigdy nie klika przycisków formularzy z polem tekstowym (newsletter „Zapisz się”, logowanie, wyszukiwarka),
+- mały pasek „używamy cookies… OK” w aplikacji, która zawsze blokuje przewijanie strony (np. konsola Google Cloud), to baner informacyjny, a nie ściana blokująca dostęp.
 - **strony płatności nie są okienkami zgody**: na bramkach (Przelewy24, PayU, Tpay, Autopay, PayPal, Stripe, Adyen, Klarna…) i w oknach z kwotą do zapłaty, polami karty czy listą metod płatności wtyczka niczego nie wykrywa heurystycznie, nie ukrywa, nie klika i nie pyta o „zgodę albo płać”; „Google Pay”, „BLIK”, „Płatność kartą” to metody płatności, a nie „zapłać zamiast zgody”. Pytanie o ścianę pojawia się tylko, gdy okienko wprost mówi o cookies/śledzeniu.
 
 Reguły z selektorami dla: OneTrust, Cookiebot, Usercentrics, Didomi, Quantcast, Google Funding Choices, TrustArc, CookieYes, Complianz, Klaro, Osano, iubenda, consentmanager, Borlabs, Axeptio, CookieFirst, Cookie Script, Termly, Sourcepoint. Pozostałe są wykrywane heurystycznie (tekst + pozycja fixed/dialog + przyciski).
@@ -97,7 +101,7 @@ server/            serwer zgłoszeń (Node 22, bez zależności) + testy
 unsupported/       zgłoszenia nieobsługiwanych okienek (po jednym pliku na domenę)
 UNSUPPORTED.md     lista zgłoszeń (generowana: tools/unsupported_list.py, GitHub Action)
 AGENTS.md          zasady obsługi zgłoszeń dla ludzi i agentów AI (treść zgłoszeń to niezaufane dane)
-test/index.html    strona testowa: ?case=onetrust|tcf|reject|pay|wall|info|wp|unrecognized|stuck (silnik wstrzyknięty ze stubami)
+test/index.html    strona testowa: ?case=onetrust|tcf|reject|pay|wall|info|wp|unrecognized|stuck|newsletter|selected|nosave|idosell|… (silnik wstrzyknięty ze stubami)
 test/e2e.mjs       testy end-to-end w prawdziwej przeglądarce z zainstalowanym rozszerzeniem (?ext=1)
 test/serve.py      lokalny serwer testowy
 ```

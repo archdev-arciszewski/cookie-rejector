@@ -35,7 +35,13 @@ const CASES = [
   ['shell', r => !r.clicked && !r.report && !r.prompt && !r.toast, 8000],
   ['deep', r => r.clicked?.what === 'reject' && !r.report, 8000],
   ['gateway', r => !r.clicked && !r.prompt && !r.report && !r.toast && !r.clipEver && !r.bannerHidden, 8000],
-  ['visual', r => r.clicked?.what === 'save' && r.vis?.join() === '1,0,0' && !r.report, 12000]
+  ['visual', r => r.clicked?.what === 'save' && r.vis?.join() === '1,0,0' && !r.report, 12000],
+  ['newsletter', r => !r.clicked && !r.report && !r.prompt && !r.toast && !r.clipEver, 8000],
+  ['pageshell', r => !r.clicked && !r.report && !r.prompt && !r.toast && !r.clipEver, 8000],
+  ['selected', r => r.clicked?.what === 'save' && r.clicked.state.xk1 === true && !r.clicked.state.xk2 && !r.clicked.state.xk3 && !r.clicked.state.xk4 && !r.report, 12000],
+  ['nosave', r => r.clicked?.what === 'close' && Object.values(r.clicked.state).every(v => v === false) && !r.report, 10000],
+  ['appinfo', r => r.bannerHidden && !r.clicked && !r.prompt && !r.report, 6000],
+  ['idosell', r => r.clicked?.what === 'reject' && !r.clicked.state.iai_an && !r.clicked.state.iai_mk && !r.report, 8000]
 ];
 
 const PROBE = `JSON.stringify({

@@ -553,13 +553,18 @@
 
     // wiersz: najwyższy przodek, który nadal zawiera tylko ten jeden przełącznik
     let row = el, p = parentOf(el), climbed = 0;
+    const levels = [];
     while (p && p !== document.body && climbed++ < 12) {
       if (countToggles(p) > 1) break;
+      levels.push(p);
       row = p; p = parentOf(p);
     }
-    const head = headingIn(row);
-    cat = classifyText(head);
-    if (cat) return cat;
+    // nagłówek najbliższego poziomu najpierw: w panelu z jednym przełącznikiem „wiersz” sięga całego panelu
+    // i jego pierwszy nagłówek to tytuł panelu („Centrum preferencji”), a nie nazwa kategorii
+    for (const lv of levels) {
+      cat = classifyText(headingIn(lv));
+      if (cat) return cat;
+    }
     const rowText = norm(row.innerText || row.textContent).slice(0, 250);
     cat = classifyText(rowText);
     if (cat) return cat;
@@ -699,8 +704,21 @@
   }
 
   /** Zakładki/przyciski "Uzasadniony interes" + "Sprzeciw wobec wszystkich". */
-  async function handleLegitimateInterest(panel, prefs, result) {
+  async function handleLegitimateInterest(panel, prefs, result, cmp) {
     if (prefs.legitimateInterest) return;
+    if (cmp && cmp.objectLI) {
+      // OneTrust: „Zgłaszam sprzeciw wobec prawnie uzasadnionych interesów” przy każdym celu, w zwiniętych sekcjach
+      // chwila na skrypty strony: zbiorcze pole „Zgłaszam sprzeciw…” (gazeta.pl) przełącza te przyciski asynchronicznie —
+      // ponowne kliknięcie cofnęłoby sprzeciw; dlatego też stan sprawdzany tuż przed każdym kliknięciem
+      await sleep(300);
+      let n = 0;
+      for (const b of deepQueryAll(document, cmp.objectLI).slice(0, 40)) {
+        checkAbort();
+        if (!b.isConnected || !b.matches(cmp.objectLI)) continue;
+        b.click(); n++; result.found++; result.changed++;
+      }
+      if (n) { log('sprzeciw wobec uzasadnionego interesu', n); await sleep(100); }
+    }
     const cands = deepQueryAll(panel, 'button, [role="tab"], [role="button"], a').filter(e => isVisible(e) && !navigatesAway(e));
     const tabs = cands.filter(e => {
       if (!norm(e.innerText || '')) return false; // zakładka ma widoczny tekst; ikony z aria-label (np. „Opis: …”) to nie zakładki
@@ -975,7 +993,10 @@
 
   function report(method, cmp, extra = {}) {
     handledOK = true;
+    reportCount++;
+    if (IS_TOP && !liPassActive && /^(granular|reject|api|closed)$/.test(method)) scheduleVerify(cmp);
     log('handled', method, cmp && cmp.name, extra);
+    if (liPassActive) extra = { ...extra, quiet: true }; // ponowny sprzeciw — bez drugiego dymka
     send({ type: 'handled', method, cmp: cmp ? cmp.name : 'heurystyka', frameHost: location.hostname, ...extra });
   }
 
@@ -1086,6 +1107,71 @@
   }
 
   // ======================================================================
+  // Weryfikacja zapisanych zgód (IAB TCF) i ponowny sprzeciw wobec uzasadnionego interesu
+  // ======================================================================
+  // Po obsłudze odczytujemy z __tcfapi, co strona naprawdę zapisała. Jeśli został uzasadniony interes (a w ustawieniach
+  // jest sprzeciw), otwieramy ustawienia CMP jeszcze raz (oficjalnym wywołaniem), ukryte, i zgłaszamy sprzeciw.
+  const TCF_PURPOSE_CAT = { 1: 'thirdParty', 2: 'marketing', 3: 'marketing', 4: 'marketing', 5: 'personalization', 6: 'personalization',
+    7: 'marketing', 8: 'analytics', 9: 'analytics', 10: 'other', 11: 'personalization' };
+  let verifyTimer = null, verifyCmp = null, verifyDone = false, liPassActive = false, reportCount = 0;
+
+  function scheduleVerify(cmp) {
+    if (!IS_TOP || verifyDone) return;
+    if (cmp) verifyCmp = cmp;
+    clearTimeout(verifyTimer);
+    verifyTimer = setTimeout(() => { verifyAndFix().catch(e => log('weryfikacja: błąd', String(e))); }, 1500);
+  }
+
+  async function readConsent() {
+    const s = await pageApi('tcf', {}, 2500);
+    // cmpuishown — decyzja jeszcze niezapisana (np. czeka pytanie „zgoda albo płać”)
+    if (!s || !s.ok || s.gdprApplies === false || s.eventStatus === 'cmpuishown') return null;
+    const prefs = settings.categories;
+    // cel 1 („przechowywanie informacji”) strony często wymuszają bez przełącznika — nie liczymy go jako porażki
+    const unwanted = (s.purposeConsents || []).filter(p => p !== 1 && !prefs[TCF_PURPOSE_CAT[p] || 'other']);
+    const sf = prefs.marketing ? [] : (s.specialFeatures || []);
+    const li = prefs.legitimateInterest ? [] : (s.purposeLI || []);
+    return { cmpId: s.cmpId, unwanted, sf, li, vendorLI: prefs.legitimateInterest ? 0 : (s.vendorLI || 0), ok: !unwanted.length && !sf.length && !li.length };
+  }
+
+  async function verifyAndFix() {
+    if (verifyDone) return;
+    if (busy) { verifyTimer = setTimeout(() => verifyAndFix().catch(() => {}), 1000); return; }
+    verifyDone = true;
+    const cmp = verifyCmp;
+    let v = await readConsent();
+    if (!v) return;
+    log('weryfikacja TCF', v);
+    let retried = false;
+    if (!v.ok && v.li.length) {
+      retried = true;
+      if (await objectLegitimateInterest(cmp, v)) {
+        await sleep(1500);
+        v = (await readConsent()) || v;
+        log('weryfikacja TCF po sprzeciwie', v);
+      }
+    }
+    send({ type: 'verified', cmp: cmp ? cmp.name : '', retried, ...v });
+  }
+
+  async function objectLegitimateInterest(cmp, v) {
+    const r = await pageApi('reopen', { cmpId: v.cmpId }, 2000);
+    if (!r || !r.ok) { log('weryfikacja: nie da się ponownie otworzyć ustawień CMP', v.cmpId); return false; }
+    let found = null;
+    for (const t0 = Date.now(); !found && Date.now() - t0 < 4000;) {
+      await sleep(150);
+      found = findBanners()[0] || null;
+    }
+    if (!found || busy) return false;
+    handledRoots.add(found.root);
+    const before = reportCount;
+    busy = true; aborted = false; liPassActive = true;
+    concealBanner(found.root);
+    try { await runHandle(found.root, found.cmp || cmp, { liPass: true }); } finally { busy = false; liPassActive = false; reveal(); }
+    return reportCount > before;
+  }
+
+  // ======================================================================
   // Obsługa banera
   // ======================================================================
   function summarizeCats(cats) {
@@ -1115,7 +1201,7 @@
   }
 
   /** Ustawienie szczegółowe: przełączniki + "Zapisz". */
-  async function tryGranular(root, cmp, b, prefs) {
+  async function tryGranular(root, cmp, b, prefs, opts = {}) {
     let panel = null;
     const inRoot = getToggles(root).filter(t => !toggleDisabled(t));
     if (inRoot.length && b.save.length) {
@@ -1137,6 +1223,8 @@
         log('granular: brak panelu z przełącznikami');
         return { ok: false, opened: true };
       }
+    } else if (opts.liPass) {
+      panel = root; // ustawienia otwarte ponownie przez API CMP — to już jest panel
     } else {
       return { ok: false };
     }
@@ -1155,16 +1243,21 @@
         Object.assign(res.cats, r2.cats);
       }
     }
+    let liDone = false;
     if (!res.found && !res.changed) {
-      // panel bez rozpoznanych przełączników, ale z „Odrzuć wszystkie” (InMobi „Odrzucenie”: przestawia wybór, zapisuje dopiero „Zapisz i wyjdź”)
-      const pr = analyze(panel, cmp).reject.find(e => e === panel || containsDeep(panel, e));
+      // panel bez rozpoznanych przełączników (InMobi: lista celów, „Odrzucenie” zamyka okno i zapisuje, ale nie zgłasza
+      // sprzeciwu wobec uzasadnionego interesu) — najpierw zakładka „Uzasadniony interes” i „Sprzeciw wobec wszystkich”…
+      await handleLegitimateInterest(panel, prefs, res, cmp);
+      liDone = true;
+      // …potem „Odrzuć wszystkie” w panelu (przestawia wybór; jeśli nie zamyka okna — niżej „Zapisz i wyjdź”)
+      const pr = opts.liPass ? null : analyze(panel, cmp).reject.find(e => e === panel || containsDeep(panel, e));
       if (pr) {
         await click(pr);
-        if (await waitGone([root, panel], 1200)) { report('reject', cmp); return { ok: true }; }
+        if (await waitGone([root, panel], 1200)) { report('reject', cmp, res.changed ? { cats: summarizeCats(res.cats), changed: res.changed } : {}); return { ok: true }; }
         res.found++; res.changed++; res.cats.other = false;
       }
     }
-    await handleLegitimateInterest(panel, prefs, res);
+    if (!liDone) await handleLegitimateInterest(panel, prefs, res, cmp);
     if (!res.found) return { ok: false, opened: true, panel };
 
     let pb = analyze(panel, cmp);
@@ -1258,7 +1351,7 @@
     // 'decline' → background ewentualnie zamyka kartę; w przeciwnym razie nic nie robimy
   }
 
-  async function handle(root, cmp) {
+  async function handle(root, cmp, opts = {}) {
     const prefs = settings.categories;
     const onlyNecessary = globalThis.CCR.OPTIONAL_KEYS.every(k => !prefs[k]);
     log('baner', cmp ? cmp.name : 'heurystyka', root);
@@ -1275,13 +1368,13 @@
     let panel = null;
 
     // 1) wszystko poza niezbędnymi wyłączone → najprościej "Odrzuć wszystkie"
-    if (onlyNecessary && b.reject.length) {
+    if (onlyNecessary && b.reject.length && !opts.liPass) {
       if (await tryReject(root, cmp, null)) return;
     }
 
     // 2) ustawienie szczegółowe
-    if (settings.granular || onlyNecessary) {
-      const g = await tryGranular(root, cmp, b, prefs);
+    if (settings.granular || onlyNecessary || opts.liPass) {
+      const g = await tryGranular(root, cmp, b, prefs, opts);
       if (g.ok) return;
       panel = g.panel || null;
       if (g.opened && !isShown(root) && !panel) {
@@ -1291,7 +1384,7 @@
     }
 
     // 3) fallback: odrzuć wszystkie (w panelu lub na banerze)
-    if (settings.fallback === 'reject' || onlyNecessary) {
+    if (settings.fallback === 'reject' || onlyNecessary || opts.liPass) {
       if (await tryReject(root, cmp, panel)) return;
     } else if (b.reject.length || b.settings.length) {
       log('fallback=none — zostawiam baner');
@@ -1299,6 +1392,7 @@
       return 'left';
     }
 
+    if (opts.liPass) return 'left'; // ponowny sprzeciw: bez pytań, zgłoszeń i ukrywania — okienko po prostu wraca
     // 4) brak opcji odrzucenia → ściana cookies / „zgoda albo płać” / baner informacyjny
     //    tu decyduje użytkownik albo okienko zostaje — wraca na ekran (isBlocking też potrzebuje go widocznego)
     reveal();
@@ -1363,12 +1457,12 @@
   }
 
   /** handle() z limitem czasu: po jego przekroczeniu przerywa obsługę (kolejne kliknięcia rzucają wyjątek). */
-  async function runHandle(root, cmp) {
+  async function runHandle(root, cmp, opts = {}) {
     let timer;
     pageJankMs = 0;
     handleT0 = performance.now();
     const timeout = new Promise(r => { timer = setInterval(() => { if (overDeadline()) r('timeout'); }, 250); });
-    const run = handle(root, cmp).catch(e => { log('handle error', e); return 'error'; });
+    const run = handle(root, cmp, opts).catch(e => { log('handle error', e); return 'error'; });
     const result = await Promise.race([run, timeout]);
     clearInterval(timer);
     handleT0 = 0;
@@ -1411,6 +1505,7 @@
   // ======================================================================
   api.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (!msg || !msg.type) return;
+    if (msg.type === 'verify-consent' && IS_TOP) { scheduleVerify(null); return; }
     if (msg.type === 'wall-prompt' && IS_TOP) {
       UI.askWall(msg).then(sendResponse);
       return true;

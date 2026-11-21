@@ -264,6 +264,22 @@
         <div><b>Rozumienie odbiorców dzięki statystyce</b><input type="checkbox" id="ob2" checked></div>
         <div class="li"><span>Wyrażam sprzeciw dla przetwarzania moich danych osobowych na podstawie uzasadnionego interesu Zaufanych Partnerów</span> <input type="checkbox" id="ob3"></div>
         <button onclick="done('save')">Zapisz moje wybory</button> <button onclick="done('accept')">Akceptuję wszystkie</button></div></div>`,
+    // OneTrust IAB: sprzeciw wobec uzasadnionego interesu to przycisk przy każdym celu, ukryty w zwiniętej sekcji
+    otli: `
+      <div id="onetrust-banner-sdk" class="fixed"><p>Używamy plików cookie, a nasi partnerzy IAB przetwarzają dane osobowe.</p>
+        <button id="onetrust-accept-btn-handler" onclick="done('accept')">Akceptuję</button>
+        <button id="onetrust-pc-btn-handler" onclick="otOpen()">Ustawienia zaawansowane</button></div>
+      <div id="onetrust-pc-sdk" class="overlay hidden"><div class="box"><h2>Centrum preferencji</h2>
+        <div><h4>Pliki cookie wydajności</h4><input type="checkbox" class="category-switch-handler" id="ot2" checked></div>
+        <div><h4>Pomiar efektywności treści</h4><div style="display:none"><button class="ot-obj-leg-btn-handler ot-leg-int-enabled" onclick="this.classList.remove('ot-leg-int-enabled')">Zgłaszam sprzeciw wobec prawnie uzasadnionych interesów</button></div></div>
+        <div><h4>Rozwój i ulepszanie usług</h4><div style="display:none"><button class="ot-obj-leg-btn-handler ot-leg-int-enabled" onclick="this.classList.remove('ot-leg-int-enabled')">Zgłaszam sprzeciw wobec prawnie uzasadnionych interesów</button></div></div>
+        <button class="save-preference-btn-handler" onclick="window.__otObjected=document.querySelectorAll('.ot-obj-leg-btn-handler:not(.ot-leg-int-enabled)').length;done('save')">Potwierdzam moje wybory</button></div></div>`,
+    // Po „Odrzuć wszystkie” strona zapisała w TCF uzasadniony interes → wtyczka sprawdza __tcfapi, otwiera ustawienia
+    // ponownie (InMobi: displayConsentUi), zgłasza sprzeciw i zapisuje — bez klikania akceptacji
+    tcfli: `
+      <div class="fixed" id="tl"><p>My i nasi partnerzy przechowujemy informacje na urządzeniu (cookies) i przetwarzamy dane osobowe.</p>
+        <button onclick="done('accept')">Akceptuję</button>
+        <button onclick="window.__tcfState.decided=true;window.__rejected=1;document.getElementById('tl').remove()">Odrzuć wszystkie</button></div>`,
     // Ściana bez płatności (tylko akceptuj, pełnoekranowa)
     wall: `
       <div class="overlay"><div class="box"><p>Aby korzystać z serwisu, musisz zaakceptować pliki cookie i przetwarzanie danych (RODO).</p>
@@ -299,6 +315,28 @@
       <button onclick="window.__rsAll='off'">Odrzucenie</button> <button onclick="window.__rsAll='on'">Akceptacja</button>
       <button onclick="done('save')">Zapisz i wyjdź</button>`;
   }
+  function otOpen() { document.getElementById('onetrust-banner-sdk').classList.add('hidden'); document.getElementById('onetrust-pc-sdk').classList.remove('hidden'); }
+  // atrapa __tcfapi (InMobi, cmpId 10): uzasadniony interes zostaje po odrzuceniu, znika po „Sprzeciw wobec wszystkich” + zapis
+  function tcfStub() {
+    const st = window.__tcfState = { decided: false, li: true };
+    window.__tcfapi = (cmd, v, cb) => {
+      if (cmd === 'ping') return cb({ cmpId: 10, gdprApplies: true }, true);
+      if (cmd === 'getTCData') return cb({ cmpId: 10, gdprApplies: true, eventStatus: st.decided ? 'useractioncomplete' : 'cmpuishown',
+        purpose: { consents: {}, legitimateInterests: st.li ? { 2: true, 7: true } : {} }, vendor: { consents: {}, legitimateInterests: st.li ? { 1: true } : {} },
+        specialFeatureOptins: {} }, true);
+      if (cmd === 'displayConsentUi') { tcfPanel(); return cb(true); }
+    };
+  }
+  function tcfPanel() {
+    const w = document.createElement('div');
+    w.className = 'overlay'; w.id = 'tlp';
+    w.innerHTML = `<div class="box"><p>Ustawienia prywatności: cele przetwarzania danych i partnerzy (pliki cookie).</p>
+      <button onclick="document.getElementById('tlli').style.display='block'">Uzasadniony interes</button>
+      <div id="tlli" style="display:none"><p>Partnerzy powołują się na uzasadniony interes.</p><button onclick="window.__tcfState.pending=true;window.__objAll=1">Sprzeciw wobec wszystkich</button></div>
+      <button onclick="window.__tcfState.decided=true;if(window.__tcfState.pending)window.__tcfState.li=false;window.__saved=1;document.getElementById('tlp').remove()">Zapisz i wyjdź</button>
+      <button onclick="window.__acceptAll=1">Akceptuj wszystkie</button></div>`;
+    document.body.appendChild(w);
+  }
   function nsEnable() { document.getElementById('mcp_savesettings').setAttribute('aria-disabled', 'false'); }
   function tg(el) { el.setAttribute('aria-checked', el.getAttribute('aria-checked') === 'true' ? 'false' : 'true'); }
   function done(what) {
@@ -310,6 +348,7 @@
     document.body.style.overflow = ''; document.documentElement.classList.remove('ccr-test-locked');
   }
   const c = params.get('case') || 'onetrust';
+  if (c === 'tcfli') tcfStub();
   const wpScreens = {
     main: `<h2>Cenimy Twoją prywatność</h2><p>Kliknij „AKCEPTUJĘ I PRZECHODZĘ DO SERWISU”, aby wyrazić zgodę na korzystanie w Internecie z technologii automatycznego gromadzenia danych (cookies) przez Wirtualną Polskę i Zaufanych Partnerów IAB (1037 partnerów). Możesz podjąć decyzję w ramach <span tabindex="0" onclick="wpShow('adv')" style="color:blue">ustawień zaawansowanych</span>.</p>
       <button onclick="done('accept')">Akceptuję i przechodzę do serwisu</button> <button onclick="wpShow('pay')">Odrzucam i chcę dowiedzieć się więcej</button>`,

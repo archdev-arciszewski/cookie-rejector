@@ -48,6 +48,8 @@ const CASES = [
   ['iubendapay', r => !r.clicked && r.prompt, 8000],
   ['loginbar', r => !r.clicked && !r.report && !r.prompt && !r.toast, 8000],
   ['objection', r => r.clicked?.what === 'save' && r.clicked.state.ob1 === false && r.clicked.state.ob2 === false && r.clicked.state.ob3 === true && !r.report, 10000],
+  ['otli', r => r.clicked?.what === 'save' && r.otObjected === 2 && r.clicked.state.ot2 === false && !r.report, 10000],
+  ['tcfli', r => r.rejected && r.objAll && r.saved && !r.acceptAll && r.tcfLi === false && !r.clicked && !r.report, 14000],
   ['idosell', r => r.clicked?.what === 'reject' && !r.clicked.state.iai_an && !r.clicked.state.iai_mk && !r.report, 8000]
 ];
 
@@ -62,6 +64,9 @@ const PROBE = `JSON.stringify({
   vis: window.__vis || null,
   reopened: window.__reopened || 0,
   rsAll: window.__rsAll || null,
+  otObjected: window.__otObjected ?? null,
+  rejected: !!window.__rejected, objAll: !!window.__objAll, saved: !!window.__saved, acceptAll: !!window.__acceptAll,
+  tcfLi: window.__tcfState ? window.__tcfState.li : null,
   clipEver: !!window.__clipEver,
   clickScroll: window.__clickScroll || [],
   inlineOverflow: document.documentElement.style.overflow + '|' + document.body.style.overflow,

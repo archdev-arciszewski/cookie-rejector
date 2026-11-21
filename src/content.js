@@ -1130,7 +1130,9 @@
     // cel 1 („przechowywanie informacji”) strony często wymuszają bez przełącznika — nie liczymy go jako porażki
     const unwanted = (s.purposeConsents || []).filter(p => p !== 1 && !prefs[TCF_PURPOSE_CAT[p] || 'other']);
     const sf = prefs.marketing ? [] : (s.specialFeatures || []);
-    const li = prefs.legitimateInterest ? [] : (s.purposeLI || []);
+    // uzasadniony interes działa tylko, gdy ma go i cel, i dostawca — sprzeciw wobec wszystkich dostawców (vendorLI = 0,
+    // np. RMF) wystarcza, nawet jeśli flagi celów zostały
+    const li = prefs.legitimateInterest || !s.vendorLI ? [] : (s.purposeLI || []);
     return { cmpId: s.cmpId, unwanted, sf, li, vendorLI: prefs.legitimateInterest ? 0 : (s.vendorLI || 0), ok: !unwanted.length && !sf.length && !li.length };
   }
 

@@ -47,6 +47,7 @@ const CASES = [
   ['closex', r => r.clicked?.what === 'close' && !r.prompt && !r.report, 8000],
   ['iubendapay', r => !r.clicked && r.prompt, 8000],
   ['loginbar', r => !r.clicked && !r.report && !r.prompt && !r.toast, 8000],
+  ['objection', r => r.clicked?.what === 'save' && r.clicked.state.ob1 === false && r.clicked.state.ob2 === false && r.clicked.state.ob3 === true && !r.report, 10000],
   ['idosell', r => r.clicked?.what === 'reject' && !r.clicked.state.iai_an && !r.clicked.state.iai_mk && !r.report, 8000]
 ];
 

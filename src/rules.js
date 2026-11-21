@@ -9,8 +9,8 @@
     /(tylko|wylacznie|jedynie) (niezbedne|wymagane|konieczne|podstawowe|techniczne)/,
     /(akceptuj|zaakceptuj|zezwol na|zgoda na|uzywaj|potwierdz\w*|zapisz) (tylko |wylacznie |jedynie )?(niezbedne|wymagane|konieczne|podstawowe)/,
     /kontynuuj bez/, /przejdz dalej bez/, /bez (akceptacji|zgody)/,
-    /\breject/, /\bdeclin/, /\bdeny\b/, /\brefuse/, /\bdisagree/, /do not (accept|agree|consent)/, /don'?t (accept|agree|consent)/,
-    /(only|just|accept|use|allow) (strictly )?(necessary|essential|required)/, /(accept|allow|use) (only|just) (the )?(strictly )?(necessary|essential|required)/, /(necessary|essential|required)( cookies)? only/,
+    /\breject/, /\bdeclin/, /\bdeny\b/, /\brefuse/, /\bdisagree/, /do not (accept|agree|consent)/, /don.?t (accept|agree|consent)/,
+    /(only|just|accept|use|allow) (strictly )?(necessary|essential|required)/, /\b(accept|allow|use) (only|just) (the )?(strictly )?(necessary|essential|required)/, /(necessary|essential|required)( cookies)? only/,
     /continue without/, /\bopt.?out\b/, /\bno,? thanks\b/,
     /ablehn/, /nicht (zustimmen|akzeptieren|einverstanden)/, /nur (notwendig|essenziell|erforderlich|technisch)/, /ohne (zustimmung|einwilligung)/, /verweiger/,
     /\brefuser/, /\btout refuser/, /continuer sans/, /je refuse/, /seulement (les )?(necessaires|essentiels)/,
@@ -34,7 +34,7 @@
     /\bsalva/, /\bconferm/,
     /\bopslaan/, /\bbevestig/, /accepteer (selectie|geselecteerd|mijn keuze)/,
     /\bulozit/, /\bpotvrdit/,
-    /accepter (la |ma )?selection/, /(tillad|tillat|salli) (valgte|valda|valitut)/, /hyvaksy valitut/, /aceptar (la )?seleccion/, /accetta (la )?selezione/,
+    /accepter (la |ma )?selection/, /(tillad|tillat|salli) (valgte|valda|valitut)/, /\bhyvaksy valitut/, /aceptar (la )?seleccion/, /accetta (la )?selezione/,
     /\bspara\b/, /\bgem\b/, /\blagre\b/, /\btallenna/, /\bguardar/, /\bgravar\b/, /\bmentes/
   ];
 

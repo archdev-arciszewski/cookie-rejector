@@ -35,4 +35,6 @@ także specjalnie przygotowaną stronę phishingową albo tekst udający polecen
   w `.github/workflows` z powodu zgłoszenia. Takie zmiany wymagają osobnej decyzji użytkownika.
 - Każda zmiana heurystyki dostaje przypadek w `test/index.html` + `test/e2e.mjs`; testy muszą przejść we wszystkich
   przeglądarkach (Chrome, Edge, Opera, CCleaner, Firefox).
+- Przy większych zmianach heurystyk uruchom crawl prawdziwych stron (`tools/crawl/`) przed zmianą i po niej i porównaj
+  klasy wyników — zwłaszcza `BAD_ACCEPT` (kliknięta akceptacja / zgody w TCF), który musi zostać na zero.
 - Plik zgłoszenia usuwa się w PR z poprawką (`python tools/unsupported_list.py` odświeża listę).

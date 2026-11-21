@@ -255,6 +255,15 @@
         <input type="email" placeholder="E-mail"> <input type="password"> <button onclick="done('login')">Dalej</button>
         <p>Korzystając z serwisu akceptujesz pliki cookie i politykę prywatności.</p>
         <a href="#" onclick="done('cookie-settings');return false">Ustawienia plików cookie</a></div>`,
+    // Pole „Wyrażam sprzeciw…” (WP, OneTrust u Agory) działa odwrotnie: zaznaczone = odmowa uzasadnionego interesu.
+    // Opis innego celu („możesz wnieść sprzeciw w każdej chwili”) nie może odwrócić logiki zwykłego przełącznika zgody.
+    objection: `
+      <div class="overlay" id="ob"><div class="box" role="dialog"><h2>Ustawienia prywatności</h2>
+        <p>My i nasi partnerzy przetwarzamy dane osobowe i używamy plików cookie.</p>
+        <div><b>Pomiar efektywności reklam</b><p>Możesz wnieść sprzeciw w każdej chwili w ustawieniach.</p><input type="checkbox" id="ob1" checked></div>
+        <div><b>Rozumienie odbiorców dzięki statystyce</b><input type="checkbox" id="ob2" checked></div>
+        <div class="li"><span>Wyrażam sprzeciw dla przetwarzania moich danych osobowych na podstawie uzasadnionego interesu Zaufanych Partnerów</span> <input type="checkbox" id="ob3"></div>
+        <button onclick="done('save')">Zapisz moje wybory</button> <button onclick="done('accept')">Akceptuję wszystkie</button></div></div>`,
     // Ściana bez płatności (tylko akceptuj, pełnoekranowa)
     wall: `
       <div class="overlay"><div class="box"><p>Aby korzystać z serwisu, musisz zaakceptować pliki cookie i przetwarzanie danych (RODO).</p>

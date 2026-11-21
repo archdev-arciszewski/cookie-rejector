@@ -629,6 +629,25 @@
     return [...changed].filter(el => !still.has(el)).length;
   }
 
+  // Przełącznik „Wyrażam sprzeciw…” (WP, OneTrust IAB: „Zgłaszam sprzeciw wobec prawnie uzasadnionych interesów”) działa odwrotnie:
+  // włączony = odmowa. Tylko sformułowania w pierwszej osobie na początku etykiety — „możesz wnieść sprzeciw” w opisie celu się nie liczy.
+  const OBJECTION_RE = /^(\S+ )?((wyrazam|zglaszam|wnosze|skladam) sprzeciw|sprzeciw (wobec|dla|na|przeciw)|i object\b|object to\b|ich widerspreche|widerspruch (gegen|einlegen)|je m'oppose|opposition (a|au|aux)\b|me opongo|mi oppongo|ik maak bezwaar|bezwaar (maken )?tegen)/;
+  function isObjectionToggle(el) {
+    const parts = [];
+    const rn = el.getRootNode();
+    for (const a of ['aria-label']) if (el.getAttribute(a)) parts.push(el.getAttribute(a));
+    const lb = el.getAttribute('aria-labelledby');
+    if (lb) for (const id of lb.split(/\s+/)) { const n = rn.getElementById ? rn.getElementById(id) : null; if (n) parts.push(n.innerText || n.textContent); }
+    try { if (el.id && rn.querySelector) { const l = rn.querySelector(`label[for="${CSS.escape(el.id)}"]`); if (l) parts.push(l.innerText || l.textContent); } } catch (e) { /* ignore */ }
+    const wrap = el.closest && el.closest('label');
+    if (wrap) parts.push(wrap.innerText || wrap.textContent);
+    // każdy poziom wiersza osobno (tekst „Zgłaszam sprzeciw…” bywa obok przełącznika, a wyższy kontener zaczyna się czym innym)
+    for (let n = parentOf(el), k = 0; n && n !== document.body && k < 6 && countToggles(n) <= 1; n = parentOf(n), k++) {
+      parts.push(n.innerText || n.textContent || '');
+    }
+    return parts.some(t => OBJECTION_RE.test(norm(t).slice(0, 160)));
+  }
+
   /** Ustawia wszystkie przełączniki w panelu. Zwraca {found, changed, cats}. */
   async function applyToggles(panel, prefs) {
     const toggles = getToggles(panel);
@@ -640,7 +659,8 @@
       plan = toggles.filter(t => !toggleDisabled(t)).map(t => [t, toggleCategory(t)]).filter(([, cat]) => cat !== 'skip');
     } finally { toggleCounts = null; }
     const items = plan.map(([t, cat]) => {
-      const want = cat === 'necessary' ? true : !!prefs[cat];
+      let want = cat === 'necessary' ? true : !!prefs[cat];
+      if (cat !== 'necessary' && isObjectionToggle(t)) { want = !prefs.legitimateInterest; cat = 'legitimateInterest'; }
       res.found++;
       res.cats[cat] = want;
       return [t, want];
@@ -695,9 +715,9 @@
     }
     const objectAll = deepQueryAll(panel, 'button, [role="button"]').filter(e => {
       const t = labelOf(e);
-      return isVisible(e) && t.length < 60 && any(t, R.BTN_OBJECT_ALL);
+      return isVisible(e) && t.length < 60 && any(t, R.BTN_OBJECT_ALL) && !/usun|cofnij|wycofaj|remove|withdraw|undo|zuruckziehen|entfernen|retirer|annuler|retirar|ritira|intrekken/.test(t);
     });
-    for (const b of objectAll.slice(0, 2)) { await click(b); result.found++; result.changed++; }
+    for (const b of objectAll.slice(0, 12)) { await click(b); result.found++; result.changed++; }
   }
 
   // ======================================================================
@@ -1125,6 +1145,25 @@
     if (!getToggles(panel).length) await waitFor(() => getToggles(panel).length, 600);
     const res = await applyToggles(panel, prefs);
     res.changed += await applyButtonPairs(panel, prefs);
+    if (res.found) {
+      // strona dokleja część przełączników chwilę po otwarciu panelu (np. gazeta.pl: „Zgłaszam sprzeciw…” pod OneTrust)
+      const n1 = getToggles(panel).length;
+      await sleep(500);
+      if (getToggles(panel).length > n1) {
+        const r2 = await applyToggles(panel, prefs);
+        res.changed += r2.changed;
+        Object.assign(res.cats, r2.cats);
+      }
+    }
+    if (!res.found && !res.changed) {
+      // panel bez rozpoznanych przełączników, ale z „Odrzuć wszystkie” (InMobi „Odrzucenie”: przestawia wybór, zapisuje dopiero „Zapisz i wyjdź”)
+      const pr = analyze(panel, cmp).reject.find(e => e === panel || containsDeep(panel, e));
+      if (pr) {
+        await click(pr);
+        if (await waitGone([root, panel], 1200)) { report('reject', cmp); return { ok: true }; }
+        res.found++; res.changed++; res.cats.other = false;
+      }
+    }
     await handleLegitimateInterest(panel, prefs, res);
     if (!res.found) return { ok: false, opened: true, panel };
 

@@ -52,7 +52,22 @@ def write_zip(path, manifest):
                 z.write(f, rel)
 
 
+def check_sources():
+    """Znaki sterujące w kodzie (np. backspace zamiast \\b w wyrażeniu regularnym po złym escapowaniu)
+    psują wzorce po cichu — przerwij budowanie."""
+    bad = []
+    for f in files():
+        if f.suffix in (".js", ".html", ".json", ".css"):
+            data = f.read_bytes()
+            for c in (b"\x08", b"\x00", b"\x0b", b"\x0c"):
+                if c in data:
+                    bad.append(f"{f.relative_to(ROOT)}: znak {c!r} x{data.count(c)}")
+    if bad:
+        raise SystemExit("Znaki sterujące w kodzie:\n  " + "\n  ".join(bad))
+
+
 def main():
+    check_sources()
     manifest = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))
     version = manifest["version"]
     if DIST.exists():
